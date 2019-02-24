@@ -1,0 +1,481 @@
+#!/bin/sh
+
+# Personal Certificate Authority
+#
+# Copyright (c) 2018 Michael Graves <mgraves@brainfat.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+#
+
+OS="openssl"
+
+function die {
+	local _rc=${1:?1}; shift;
+	local _out=$*
+#XXX clean up any temporary files
+	if [ ! -z "$_out" ]; then
+		echo "$_out"
+	fi
+	exit $_rc 
+}
+
+function syntax {
+	local _rc=${1:?0}
+	echo "${0##/} <ca> <command> [options]"
+	echo "Commands:"
+	echo "  init"
+	echo "  create key <-name name> [-bits #]"
+	echo "  create req[uest] <-name name> <-key file | -newkey> [-sign] [-days] [-san val ...]"
+	echo "  sign cert[ificate] <-name name> <-csr file> [-self] [-days] [-san val ...]"
+	echo ""
+	die $_rc
+}
+
+function get_root {
+	echo "$1.ca"
+}
+
+function check_ca {
+	local _ca=$1
+	if [ -z $_ca ]; then
+		echo "no CA specified"
+		return 1
+	fi
+	if [ ! -d ./$_ca.ca ]; then
+		echo "$_ca not found. Must first be initialzed"
+		return 1
+	fi
+}
+
+function read_config {
+	local _ca=$1
+	[ -z "$_ca" ] && return 1
+	local _root=`get_root $_ca`
+	if [ ! -f $_root/config.env ]; then
+		die 1 "cannot read config"
+	fi
+	. $_root/config.env
+#	local _ofs=$IFS
+#	cat $_root/config.env | grep -v "^#" | while IFS="=" read k v; do
+#		_cfg[$k]=$v
+##		export $k=$v
+#	done
+#	IFS=$_ofs
+	return 0
+}
+
+function prep_serial {
+	local _ca=$1; shift;
+	[ -z "$_ca" ] && return 1
+	$OS rand -hex 8 > $DBDIR/serial.txt
+	return 0
+}
+
+function init_ca {
+	local _ca=$1
+	local _root
+	if [ -z $_ca ]; then
+		echo "no CA specified"
+		return 1
+	fi
+	_root=`get_root $_ca`
+	if [ -d $_root ]; then
+		echo "CA $_ca already exists"
+		return 1
+	fi
+	mkdir -p $_root
+	touch $_root/serial.txt
+	touch $_root/index.txt
+	touch $_root/index.txt.attr
+	mkdir $_root/certs
+	mkdir $_root/requests
+	mkdir $_root/db
+	mkdir $_root/db/library
+	mkdir $_root/crl
+	mkdir $_root/private
+	cat <<EOF> $_root/config.env
+# Personal Certificate Authority config
+#
+HOME=$_root
+RANDFILE=/dev/arandom
+CERTDIR=$_root/certs
+REQDIR=$_root/requests
+DBDIR=$_root/db
+LIBDIR=$_root/db/library
+CRLDIR=$_root/crl
+KEYDIR=$_root/private
+ROOTCERT=$_ca.crt
+ROOTKEY=$_ca.key
+ROOTCRL=$_ca.crl
+PUBLICURL=xxx
+CRLDAYS=365
+CERTDAYS=365
+DEFMD=sha256
+DEFBITS=2048
+ROOTCHAIN=xxx
+EOF
+
+	cat <<EOF> $_root/config.ca
+[ ca ]
+dir				= \$ENV::HOME
+certs			= \$ENV::CERTDIR
+crl_dir			= \$ENV::CRLDIR
+new_certs_dir	= \$ENV::LIBDIR
+databse 		= \$ENV::DBDIR/index.txt
+serial			= \$ENV::DBDIR/serial.txt
+certificate		= \$ENV::CERTDIR/\$ENV::ROOTCERT
+crl				= \$ENV::CRLDIR/\$ENV::ROOTCERT
+private_key		= \$ENV::KEYDIR/\$ENV::ROOTCERT
+default_md		= \$ENV::DEFMD
+default_bits	= \$ENV::DEFBITS
+default_crl_days	= \$ENV::CRLDAYS
+default_days	= \$ENV::CERTDAYS
+distinguished_name = req_distinguished_name
+attributes		= req_attributes
+string_mask		= utf8only
+nsCertType		= client, email, server
+policy			= policy_match
+req_extensions	= cert_ext
+
+EOF
+
+	cat <<EOF> $_root/config.req
+[ req ]
+default_days	= \$ENV::CERTDAYS
+default_bits	= \$ENV::DEFBITS
+default_md		= \$ENV::DEFMD
+distinguished_name = req_distinguished_name
+attributes		= req_attributes
+string_mask		= utf8only
+nsCertType		= client, email, server
+policy			= policy_match
+req_extensions	= cert_ext
+
+EOF
+	cat <<EOF> $_root/config.req_dn
+
+[ req_distinguished_name ]
+countryName                     = Country Name (2 letter code)
+countryName_default             = XX
+countryName_min                 = 2
+countryName_max                 = 2
+stateOrProvinceName             = State or Province Name (full name)
+#stateOrProvinceName_default    = Confusion
+localityName                    = Locality Name (eg, city)
+0.organizationName              = Organization Name (eg, company)
+0.organizationName_default      = None
+organizationalUnitName          = Organizational Unit Name (eg, section)
+#organizationalUnitName_default =
+commonName                      = Common Name (eg, fully qualified host name)
+commonName_max                  = 64
+emailAddress                    = Email Address
+emailAddress_max                = 64
+
+[ req_attributes ]
+#challengePassword               = A challenge password
+#challengePassword_min           = 4
+#challengePassword_max           = 20
+#unstructuredName                = An optional company name
+
+[ policy_match ]
+countryName	= match
+stateOrProvinceName	= optional
+localityName = optional
+organizationNamel = match
+organizationUnitName = optional
+commonName = supplied
+emailAddress = optional
+subjectAltName = optional
+
+EOF
+	cat <<EOF> $_root/config.ca_ext
+[ cert_ext ]
+basicConstraints = critical,CA:TRUE,pathlen:2
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+crlDistributionPoints = URI:\$ENV::PUBILCURL/\$ENV::ROOTCRL
+
+EOF
+
+	cat <<EOF> $_root/config.cert_ext
+[ cert_ext ]
+basicConstraints = critical,CA:FALSE
+keyUsage = nonRepudiation,digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth,clientAuth,emailProtection
+subjectKeyIdentifier = hash
+crlDistributionPoints = URI:\$ENV::PUBILCURL/\$ENV::ROOTCRL
+subjectAltName = @altname
+
+EOF
+
+	return 0	
+}
+
+function key_pass {
+	local _ca=$1; shift
+	[ -z "$_ca" ] && return 1
+	local _n=$1; shift
+	[ -z "$_n" ] && return 1
+	local _tf=`mktemp -p $KEYDIR $_n.XXXXXX` || die 1 "key_pass: mktemp"
+	$OS rand -hex 16 > $_tf
+	mv -f $_tf $KEYDIR/$_n.pass || return 1
+	return 0
+}
+
+function create_key {
+	local _ca=$1; shift
+	local _n
+	local _bits
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-bits)
+				_bits=$2
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "-name not set"
+		return 1
+	fi
+	if [ -z "$_bits" ]; then
+		_bits=$DEFBITS
+	fi
+	key_pass $_ca $_n
+	if [ $? -ne 0 ]; then
+		echo "error generating key pass"
+		return 1
+	fi
+	local _tf=`mktemp -p $KEYDIR $_n.XXXXXX` || die 1 "create_key: mktemp"
+	$OS genrsa -out $_tf $_bits
+	$OS rsa -aes256 -passout file:$KEYDIR/$_n.pass -in $_tf -out $KEYDIR/$_n.key	
+	rm -f $_tf
+	chmod 400 $KEYDIR/$_n.key
+	echo $KEYDIR/$_n.key
+	return 0
+}
+
+function create_csr {
+	local _ca=$1; shift;
+	local _n
+	local _key
+	local _days
+	local _san
+	local _tf
+	local _sign=0
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-key)
+				_key=$2
+				shift; shift;;
+			-newkey)
+				if [ -z "$_n" ]; then
+					echo "-name must be set first"
+					return 1
+				fi 
+				_key=`create_key $_ca -name $_n`
+				if [ $? -ne 0 ]; then
+					echo $_key
+					return 1
+				fi
+				shift;;
+			-days)
+				_days=$2
+				shift; shift;;
+			-san)
+				_san="$_san $2"
+				shift; shift;;
+			-sign)
+				_sign=1
+				shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "no name specified"
+		return 1
+	fi
+	if [ -z "$_key" ]; then
+		echo "no key specified"
+		return 1
+	fi
+	if [ ! -f $_key ]; then
+		if [ -f $KEYDIR/$_key ]; then
+			_key=$KEYDIR/$_key
+		else
+			echo "cannot find key file"
+			return 1
+		fi
+	fi
+	if [ -z "$_days" ]; then
+		_days=$CERTDAYS
+	fi
+	_tf=`mktemp` || die 1 "create_csr: mktemp"
+	echo # generated config > $_tf
+	cat $HOME/config.env >> $_tf
+	if [ $_sign -eq 0 ]; then
+		cat $HOME/config.req >> $_tf
+		cat $HOME/config.req_dn >> $_tf
+		cat $HOME/config.cert_ext >> $_tf
+	else
+		cat $HOME/config.ca >> $_tf
+		cat $HOME/config.req_dn >> $_tf
+		cat $HOME/config.ca_ext >> $_tf
+	fi
+	if [ ! -z "$_san" ]; then
+		# must always be in the cert_ext section
+		echo "subjectAltname = @altname" >> $_tf
+		echo ""
+		echo "[ altname ]" >> $_tf
+		for i in $_san; do
+			echo $i >> $_tf
+		done
+	fi
+	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+	if [ $? -ne 0 ]; then
+		rm -f $_tf
+		echo $out
+		return 1
+	fi
+	echo $REQDIR/$_n.req
+	rm -f $_tf
+	return 0
+}
+
+function create_cert {
+	local _ca=$1; shift;
+	local _n
+	local _sans
+
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-san)
+				_san="$_san $2"
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "no name specified"
+		return 1
+	fi
+
+#XXX do work here
+	if [ -z "$_days" ]; then
+		_days=$CERTDAYS
+	fi
+	_tf=`mktemp` || die 1 "create_csr: mktemp"
+	echo # generated config > $_tf
+	cat $HOME/config.env >> $_tf
+	cat $HOME/config.req >> $_tf
+	cat $HOME/config.req_dn >> $_tf
+	if [ ! -z "$_san" ]; then
+		# must always be in teh cert_ext section
+		echo "subjectAltname = @altname" >> $_tf
+		echo ""
+		echo "[ altname ]" >> $_tf
+		for i in $_san; do
+			echo $i >> $_tf
+		done
+	fi
+	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+	if [ $? -ne 0 ]; then
+		rm -f $_tf
+		echo $out
+		return 1
+	fi
+	echo $REQDIR/$_n.req
+	rm -f $_tf
+	return 0
+}
+	return 0
+}
+
+
+if [ $# -lt 2 ]; then
+	syntax 1
+fi
+
+CA=$1; shift;
+
+if [ "$1" == "init" ]; then
+	out=`init_ca $CA`
+	if [ $? -ne 0 ]; then
+		die 1 $out
+	fi
+	die 0 "CA initialized"
+fi
+
+out=`check_ca $CA` || die 1 "$out"
+read_config $CA
+
+while [ $# -ne 0 ]; do
+	case "$1" in
+		create)
+			shift
+			if [ -z "$1" ]; then
+				die 1 "nothing to do"
+			fi
+			case "$1" in
+				key)
+					shift;
+					out=`create_key $CA $*` || die 1 "$out"
+					# success... now eat rest of args
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				req|req*)
+					shift;
+					out=`create_csr $CA $*` || die 1 "$out"
+					# success... now eat rest of args
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				crt|cert*)
+					out=`create_cert $CA $*` || die 1 "$out"
+					# success... now eat rest of args
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				crl)
+					shift
+					;;
+				*)
+					die 1 "Unknown command $1"
+					shift;;
+			esac
+			;;
+		*)
+			die 1 "Unknown command $1"
+			break;;
+	esac
+done
+
+
