@@ -34,6 +34,12 @@ function syntax {
 	echo "${0##/} <ca> <command> [options]"
 	echo "Commands:"
 	echo "  init"
+	echo "  config list <macros | pol[icy] | ext[ension]>"
+	echo "  config get macro <-key xxx> <-value>"
+	echo "  config set macro <-key xxx> <-value xxx>"
+	echo "  config get pol|ext <-name> <-key xxx> <-value>"
+	echo "  config set pol|ext <-name> <-key xxx> <-value xxx>"
+	echo "  create root [-days #] [-bits #]"
 	echo "  create key <-name name> [-bits #]"
 	echo "  create req[uest] <-name name> <-key file | -newkey> [-sign] [-days] [-san val ...]"
 	echo "  sign cert[ificate] <-name name> <-csr file> [-self] [-days] [-san val ...]"
@@ -61,10 +67,10 @@ function read_config {
 	local _ca=$1
 	[ -z "$_ca" ] && return 1
 	local _root=`get_root $_ca`
-	if [ ! -f $_root/config.env ]; then
+	if [ ! -f $_root/config/macros ]; then
 		die 1 "cannot read config"
 	fi
-	. $_root/config.env
+	. $_root/config/macros
 #	local _ofs=$IFS
 #	cat $_root/config.env | grep -v "^#" | while IFS="=" read k v; do
 #		_cfg[$k]=$v
@@ -103,7 +109,8 @@ function init_ca {
 	mkdir $_root/db/library
 	mkdir $_root/crl
 	mkdir $_root/private
-	cat <<EOF> $_root/config.env
+	mkdir $_root/config
+	cat <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
 HOME=$_root
@@ -125,7 +132,7 @@ DEFBITS=2048
 ROOTCHAIN=xxx
 EOF
 
-	cat <<EOF> $_root/config.ca
+	cat <<EOF> $_root/config/ca
 [ ca ]
 dir				= \$ENV::HOME
 certs			= \$ENV::CERTDIR
@@ -149,7 +156,7 @@ req_extensions	= cert_ext
 
 EOF
 
-	cat <<EOF> $_root/config.req
+	cat <<EOF> $_root/config/req
 [ req ]
 default_days	= \$ENV::CERTDAYS
 default_bits	= \$ENV::DEFBITS
@@ -162,8 +169,7 @@ policy			= policy_match
 req_extensions	= cert_ext
 
 EOF
-	cat <<EOF> $_root/config.req_dn
-
+	cat <<EOF> $_root/config/req_dn
 [ req_distinguished_name ]
 countryName                     = Country Name (2 letter code)
 countryName_default             = XX
@@ -187,6 +193,8 @@ emailAddress_max                = 64
 #challengePassword_max           = 20
 #unstructuredName                = An optional company name
 
+EOF
+	cat <<EOF> $_root/config/policy_match
 [ policy_match ]
 countryName	= match
 stateOrProvinceName	= optional
@@ -198,24 +206,23 @@ emailAddress = optional
 subjectAltName = optional
 
 EOF
-	cat <<EOF> $_root/config.ca_ext
+	cat <<EOF> $_root/config/extension_ca
 [ cert_ext ]
 basicConstraints = critical,CA:TRUE,pathlen:2
 keyUsage = critical,keyCertSign,cRLSign
 subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid,issuer:always
-crlDistributionPoints = URI:\$ENV::PUBILCURL/\$ENV::ROOTCRL
+crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
 
 EOF
 
-	cat <<EOF> $_root/config.cert_ext
+	cat <<EOF> $_root/config/extension_cert
 [ cert_ext ]
 basicConstraints = critical,CA:FALSE
 keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth,clientAuth,emailProtection
 subjectKeyIdentifier = hash
-crlDistributionPoints = URI:\$ENV::PUBILCURL/\$ENV::ROOTCRL
-subjectAltName = @altname
+authorityKeyIdentifier = keyid
+crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
 
 EOF
 
@@ -270,6 +277,79 @@ function create_key {
 	rm -f $_tf
 	chmod 400 $KEYDIR/$_n.key
 	echo $KEYDIR/$_n.key
+	return 0
+}
+
+function create_root {
+	local _ca=$1; shift;
+	local _n
+	local _key
+	local _days
+	local _tf
+	local _bits
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-days)
+				_days=$2
+				shift; shift;;
+			-bits)
+				_bits=$2
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+set -x
+	_n=$ROOTCERT
+	if [ -z "$_n" ]; then
+		echo "no name specified"
+		return 1
+	fi
+	if [ -f $CERTDIR/$ROOTCERT ]; then
+		echo "CA root certificate already exists.  aborting"
+		return 1
+	fi
+	if [ -z "$_bits" ]; then
+		# if not specified, make root key 2 * DEFBITS
+		_bits=$((DEFBITS * 2))
+	fi
+	if [ ! -f $KEYDIR/$ROOTKEY ]; then
+		_key=`create_key $_ca -name ${ROOTKEY%%.key} -bits $_bits`
+		if [ $? -ne 0 ]; then
+			echo "error creating root key"
+			return 1
+		fi
+	else
+		_key=$KEYDIR/$ROOTKEY
+	fi
+#	if [ $ROOTKEY -ne ${_key##/} ]; then
+#	fi
+	if [ -z "$_key" ]; then
+		echo "no key specified"
+		return 1
+	fi
+	if [ -z "$_days" ]; then
+		_days=$CERTDAYS
+	fi
+	prep_serial $_ca
+	_tf=`mktemp` || die 1 "create_root: mktemp"
+	echo # generated config > $_tf
+	cat $HOME/config/macros >> $_tf
+	cat $HOME/config/req >> $_tf
+	cat $HOME/config/req_dn >> $_tf
+	cat $HOME/config/extension_ca >> $_tf
+cat $_tf >&2
+	out=`$OS req -config $_tf -new -x509 -key $_key -passin file:$KEYDIR/${_n%%.crt}.pass -out $CERTDIR/$_n -days $_days`
+	if [ $? -ne 0 ]; then
+		cat $_tf >&2
+		rm -f $_tf
+		echo $out
+		return 1
+	fi
+	echo $REQDIR/$_n
+	rm -f $_tf
 	return 0
 }
 
@@ -336,15 +416,13 @@ function create_csr {
 	fi
 	_tf=`mktemp` || die 1 "create_csr: mktemp"
 	echo # generated config > $_tf
-	cat $HOME/config.env >> $_tf
+	cat $HOME/config/macros >> $_tf
+	cat $HOME/config/req >> $_tf
+	cat $HOME/config/req_dn >> $_tf
 	if [ $_sign -eq 0 ]; then
-		cat $HOME/config.req >> $_tf
-		cat $HOME/config.req_dn >> $_tf
-		cat $HOME/config.cert_ext >> $_tf
+		cat $HOME/config/extension_cert >> $_tf
 	else
-		cat $HOME/config.ca >> $_tf
-		cat $HOME/config.req_dn >> $_tf
-		cat $HOME/config.ca_ext >> $_tf
+		cat $HOME/config/extension_ca >> $_tf
 	fi
 	if [ ! -z "$_san" ]; then
 		# must always be in the cert_ext section
@@ -357,6 +435,7 @@ function create_csr {
 	fi
 	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
+		cat $_tf >&2
 		rm -f $_tf
 		echo $out
 		return 1
@@ -370,14 +449,24 @@ function create_cert {
 	local _ca=$1; shift;
 	local _n
 	local _sans
-
+	local _self=0
+	local _csr
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
 				_n=$2
 				shift; shift;;
+			-days)
+				_days=$2
+				shift; shift;;
 			-san)
 				_san="$_san $2"
+				shift; shift;;
+			-self)
+				_self=1
+				shift;;
+			-csr)
+				_csr=$2
 				shift; shift;;
 			*)
 				echo "unknown option $1"
@@ -390,15 +479,31 @@ function create_cert {
 		return 1
 	fi
 
+	if [ -z "$_csr" ]; then
+		echo "no csr specified"
+		return 1
+	fi
+	if [ ! -f $_csr ]; then
+		if [ -f $REQDIR/$_csr ]; then
+			_csr=$REQDIR/$_csr
+		else
+			echo "cannot find csr file"
+			return 1
+		fi
+	fi
+	if [ -z "$_days" ]; then
+		_days=$CERTDAYS
+	fi
+
 #XXX do work here
 	if [ -z "$_days" ]; then
 		_days=$CERTDAYS
 	fi
 	_tf=`mktemp` || die 1 "create_csr: mktemp"
 	echo # generated config > $_tf
-	cat $HOME/config.env >> $_tf
-	cat $HOME/config.req >> $_tf
-	cat $HOME/config.req_dn >> $_tf
+	cat $HOME/config/marcos >> $_tf
+	cat $HOME/config/cert >> $_tf
+	cat $HOME/config/req_dn >> $_tf
 	if [ ! -z "$_san" ]; then
 		# must always be in teh cert_ext section
 		echo "subjectAltname = @altname" >> $_tf
@@ -408,8 +513,10 @@ function create_cert {
 			echo $i >> $_tf
 		done
 	fi
-	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+#XXX need root key to sign unless -self is specified
+	out=`$OS ca -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
+		cat $_tf >&2
 		rm -f $_tf
 		echo $out
 		return 1
@@ -418,9 +525,97 @@ function create_cert {
 	rm -f $_tf
 	return 0
 }
+
+function get_config {
+	local _ca=$1; shift;
+	local _n
+	local _k
+	local _kv
+	local _v=0
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-key)
+				_k=$2
+				shift; shift;;
+			-val*)
+				_v=1
+				shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "no name specified"
+		return 1
+	fi
+	if [ -z "$_k" ]; then
+		echo "no key specified"
+		return 1
+	fi
+	_kv=`cat $HOME/config/$_n | grep -i $_k`
+	if [ $_v -eq 0 ]; then
+		echo $_kv
+	else
+		echo $_kv | cut -f2 -d=
+	fi
 	return 0
 }
 
+function set_config {
+set -x
+	local _ca=$1; shift;
+	local _n
+	local _k
+	local _kv
+	local _v
+	local _d=0
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-key)
+				_k=$2
+				shift; shift;;
+			-val*)
+				_v=$2
+				shift; shift;;
+			-d*)
+				_d=1
+				shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "no name specified"
+		return 1
+	fi
+	if [ -z "$_k" ]; then
+		echo "no key specified"
+		return 1
+	fi
+	if [ -z "$_v" -a $_d -eq 0 ]; then
+		echo "no value specified"
+		return 1
+	fi
+	_tf=`mktemp` || die 1 "set_config: mktemp"
+	if [ $_d -eq 0 ]; then
+		cat $HOME/config/$_n | sed -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
+	else
+		cat $HOME/config/$_n | sed -r "/^$_k[[:space:]]*=/d" > $_tf
+	fi
+	mv -f $_tf $HOME/config/$_n
+#	cat $HOME/config/$_n >&2
+	return 0
+}
 
 if [ $# -lt 2 ]; then
 	syntax 1
@@ -443,10 +638,13 @@ while [ $# -ne 0 ]; do
 	case "$1" in
 		create)
 			shift
-			if [ -z "$1" ]; then
-				die 1 "nothing to do"
-			fi
+			[ -z "$1" ] && die 1 "nothing to do"
 			case "$1" in
+				root)
+					out=`create_root $CA` || die 1 "$out"
+					# success... now eat rest of args
+					while [ $# -ne 0 ]; do shift; done
+					;;
 				key)
 					shift;
 					out=`create_key $CA $*` || die 1 "$out"
@@ -460,6 +658,7 @@ while [ $# -ne 0 ]; do
 					while [ $# -ne 0 ]; do shift; done
 					;;
 				crt|cert*)
+					shift;
 					out=`create_cert $CA $*` || die 1 "$out"
 					# success... now eat rest of args
 					while [ $# -ne 0 ]; do shift; done
@@ -471,6 +670,89 @@ while [ $# -ne 0 ]; do
 					die 1 "Unknown command $1"
 					shift;;
 			esac
+			;;
+		config)
+			shift;
+			[ -z "$1" ] && die 1 "nothing to do"
+			case "$1" in
+				list)
+					[ -z "$2" ] && die 1 "nothing to do"
+					case "$2" in
+						mac*)
+							cat $HOME/config/macros
+							;;
+						pol*)
+							cat $HOME/config/policy_*
+#							for i in `ls $HOME/config/policy_*`; do
+#								echo ${i##*/}
+#							done
+							;;
+						ext*)
+							cat $HOME/config/extension_*
+#							for i in `ls $HOME/config/extension_*`; do
+#								echo ${i##*/}
+#							done
+							;;
+						*)
+							die 1 "Unknown command $2"
+							;;
+					esac
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				get)
+					shift
+					[ -z "$1" ] && die 1 "nothing to do"
+					case "$1" in
+						mac*)
+							shift
+							out=`get_config $CA -name macros $*` || die 1 "$out"
+							# success... now eat rest of args
+							echo $out
+							while [ $# -ne 0 ]; do shift; done
+							;;
+						pol*|ext*)
+							shift
+							out=`get_config $CA $*` || die 1 "$out"
+							# success... now eat rest of args
+							echo $out
+							while [ $# -ne 0 ]; do shift; done
+							;;
+						*)
+							die 1 "Unknown command $1"
+							;;
+					esac
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				set)
+					shift
+					[ -z "$1" ] && die 1 "nothing to do"
+					case "$1" in
+						mac*)
+							shift
+							out=`set_config $CA -name macros $*` || die 1 "$out"
+							# success... now eat rest of args
+							echo $out
+							while [ $# -ne 0 ]; do shift; done
+							;;
+						pol*|ext*)
+							shift
+							out=`set_config $CA $*` || die 1 "$out"
+							# success... now eat rest of args
+							echo $out
+							while [ $# -ne 0 ]; do shift; done
+							;;
+						*)
+							die 1 "Unknown command $1"
+							;;
+					esac
+					while [ $# -ne 0 ]; do shift; done
+					;;
+
+				*)
+					die 1 "Unknown command $1"
+					shift;;
+			esac
+			while [ $# -ne 0 ]; do shift; done
 			;;
 		*)
 			die 1 "Unknown command $1"
