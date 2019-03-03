@@ -33,22 +33,25 @@ function syntax {
 	local _rc=${1:?0}
 	echo "${0##/} <ca> <command> [options]"
 	echo "Commands:"
-	echo "  init"
-	echo "  config list <macros | pol[icy] | ext[ension]>"
-	echo "  config get macro <-key xxx> <-value>"
-	echo "  config set macro <-key xxx> <-value xxx>"
-	echo "  config get pol|ext <-name> <-key xxx> <-value>"
-	echo "  config set pol|ext <-name> <-key xxx> <-value xxx>"
-	echo "  create root [-days #] [-bits #]"
-	echo "  create key <-name name> [-bits #]"
-	echo "  create req[uest] <-name name> <-key file | -newkey> [-sign] [-days] [-san val ...]"
-	echo "  sign cert[ificate] <-name name> <-csr file> [-self] [-days] [-san val ...]"
+	echo "  <ca> init"
+	echo "  <ca> config list <macros | pol[icy] | ext[ension]>"
+	echo "  <ca> config get macro <-key xxx> <-value>"
+	echo "  <ca> config set macro <-key xxx> <-value xxx>"
+	echo "  <ca> config get pol|ext <-name> <-key xxx> <-value>"
+	echo "  <ca> config set pol|ext <-name> <-key xxx> <-value xxx>"
+	echo "  <ca> create root [-days #] [-bits #]"
+	echo "  <ca> create key <-name name> [-bits #]"
+	echo "  <ca> create req[uest] <-name name> <-key file | -newkey> [-sign] [-days #] [-san val ...]"
+	echo "  <ca> sign <-name name> [-self] [-days] [-san val ...]"
+	echo "  <ca> show root [same options as show cert]"
+	echo "  <ca> show req [-name name]"
+	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
 	echo ""
 	die $_rc
 }
 
 function get_root {
-	echo "$1.ca"
+	echo ".$1.ca"
 }
 
 function check_ca {
@@ -57,8 +60,8 @@ function check_ca {
 		echo "no CA specified"
 		return 1
 	fi
-	if [ ! -d ./$_ca.ca ]; then
-		echo "$_ca not found. Must first be initialzed"
+	if [ ! -d ./.$_ca.ca ]; then
+		echo "CA '$_ca' not found. Must first be initialzed"
 		return 1
 	fi
 }
@@ -100,12 +103,12 @@ function init_ca {
 		return 1
 	fi
 	mkdir -p $_root
-	touch $_root/serial.txt
-	touch $_root/index.txt
-	touch $_root/index.txt.attr
 	mkdir $_root/certs
 	mkdir $_root/requests
 	mkdir $_root/db
+	touch $_root/db/serial.txt
+	touch $_root/db/index.txt
+	touch $_root/db/index.txt.attr
 	mkdir $_root/db/library
 	mkdir $_root/crl
 	mkdir $_root/private
@@ -121,24 +124,23 @@ DBDIR=$_root/db
 LIBDIR=$_root/db/library
 CRLDIR=$_root/crl
 KEYDIR=$_root/private
-ROOTCERT=$_ca.crt
-ROOTKEY=$_ca.key
+ROOTCERT=root-$_ca.crt
+ROOTKEY=root-$_ca.key
 ROOTCRL=$_ca.crl
-PUBLICURL=xxx
 CRLDAYS=365
 CERTDAYS=365
 DEFMD=sha256
 DEFBITS=2048
+PUBLICURL=xxx
 ROOTCHAIN=xxx
 EOF
 
-	cat <<EOF> $_root/config/ca
-[ ca ]
+	cat <<EOF> $_root/config/prog_ca
 dir				= \$ENV::HOME
 certs			= \$ENV::CERTDIR
 crl_dir			= \$ENV::CRLDIR
 new_certs_dir	= \$ENV::LIBDIR
-databse 		= \$ENV::DBDIR/index.txt
+database 		= \$ENV::DBDIR/index.txt
 serial			= \$ENV::DBDIR/serial.txt
 certificate		= \$ENV::CERTDIR/\$ENV::ROOTCERT
 crl				= \$ENV::CRLDIR/\$ENV::ROOTCERT
@@ -147,30 +149,20 @@ default_md		= \$ENV::DEFMD
 default_bits	= \$ENV::DEFBITS
 default_crl_days	= \$ENV::CRLDAYS
 default_days	= \$ENV::CERTDAYS
-distinguished_name = req_distinguished_name
-attributes		= req_attributes
 string_mask		= utf8only
 nsCertType		= client, email, server
-policy			= policy_match
-req_extensions	= cert_ext
-
 EOF
 
-	cat <<EOF> $_root/config/req
-[ req ]
+	cat <<EOF> $_root/config/prog_req
 default_days	= \$ENV::CERTDAYS
 default_bits	= \$ENV::DEFBITS
 default_md		= \$ENV::DEFMD
-distinguished_name = req_distinguished_name
-attributes		= req_attributes
 string_mask		= utf8only
 nsCertType		= client, email, server
-policy			= policy_match
-req_extensions	= cert_ext
-
 EOF
 	cat <<EOF> $_root/config/req_dn
-[ req_distinguished_name ]
+commonName                      = Common Name (eg, fully qualified host name)
+commonName_max                  = 64
 countryName                     = Country Name (2 letter code)
 countryName_default             = XX
 countryName_min                 = 2
@@ -182,51 +174,163 @@ localityName                    = Locality Name (eg, city)
 0.organizationName_default      = None
 organizationalUnitName          = Organizational Unit Name (eg, section)
 #organizationalUnitName_default =
-commonName                      = Common Name (eg, fully qualified host name)
-commonName_max                  = 64
 emailAddress                    = Email Address
 emailAddress_max                = 64
-
-[ req_attributes ]
+EOF
+	cat <<EOF> $_root/config/req_attrs
 #challengePassword               = A challenge password
 #challengePassword_min           = 4
 #challengePassword_max           = 20
 #unstructuredName                = An optional company name
-
 EOF
 	cat <<EOF> $_root/config/policy_match
-[ policy_match ]
 countryName	= match
 stateOrProvinceName	= optional
 localityName = optional
-organizationNamel = match
+organizationName = match
 organizationUnitName = optional
 commonName = supplied
 emailAddress = optional
 subjectAltName = optional
-
+EOF
+	cat <<EOF> $_root/config/policy_sign
+countryName	= optional
+stateOrProvinceName	= optional
+localityName = optional
+organizationName = optional
+organizationUnitName = optional
+commonName = supplied
+emailAddress = optional
+subjectAltName = optional
 EOF
 	cat <<EOF> $_root/config/extension_ca
-[ cert_ext ]
 basicConstraints = critical,CA:TRUE,pathlen:2
 keyUsage = critical,keyCertSign,cRLSign
 subjectKeyIdentifier = hash
 crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
-
 EOF
 
 	cat <<EOF> $_root/config/extension_cert
-[ cert_ext ]
 basicConstraints = critical,CA:FALSE
 keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth,clientAuth,emailProtection
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid
 crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
-
 EOF
 
 	return 0	
+}
+
+function build_config {
+	local _ca=$1; shift
+	[ -z "$_ca" ] && return 1
+	local _prog=$1; shift
+	[ -z "$_prog" ] && return 1
+	local _policy
+	local _exten
+	local _dn
+	local _attrs
+	local _san
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-p*)
+				_policy=$2
+				shift; shift;;
+			-e*)
+				_exten=$2
+				shift; shift;;
+			-d*)
+				_dn=$2
+				shift; shift;;
+			-a*)
+				_attrs=$2
+				shift; shift;;
+			-s*)
+				if [ ! -z "$2" ]; then
+					_san="$_san $2"
+				fi
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	_tf=`mktemp` || die 1 "build_config: mktemp"
+	echo # generated config > $_tf
+	cat $HOME/config/macros >> $_tf
+	if [ -z "$_prog" -o ! -f $HOME/config/prog_$_prog ]; then
+		echo "missing program or config not found"
+		rm -f $_tf
+		return 1
+	fi
+	echo "" >> $_tf
+	echo "[ $_prog ]" >> $_tf
+	if [ "$_prog" == "ca" ]; then
+		echo "default_ca=this_ca" >> $_tf
+		echo "[ this_ca ]" >> $_tf
+	fi
+	cat $HOME/config/prog_$_prog >> $_tf
+	[ ! -z "$_dn" ] && echo "distinguished_name=$_dn" >> $_tf
+	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
+	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
+	[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
+	if [ ! -z "$_dn" ]; then
+		if [ -f $HOME/config/$_dn ]; then
+			echo "[ $_dn ]" >> $_tf
+			cat $HOME/config/$_dn >> $_tf
+		else
+			echo "missing DN config"
+			rm -f $_tf
+			return 1
+		fi
+	fi
+	echo "" >> $_tf
+	if [ ! -z $_attrs ]; then
+		if [ -f $HOME/config/$_attrs ]; then
+			echo "[ $_attrs ]" >> $_tf
+			cat $HOME/config/$_attrs >> $_tf
+		else
+			echo "missing attrs config"
+			rm -f $_tf
+			return 1
+		fi
+	fi
+	echo "" >> $_tf
+	if [ ! -z $_policy ]; then
+		if [ -f $HOME/config/$_policy ]; then
+			echo "[ $_policy ]" >> $_tf
+			cat $HOME/config/$_policy >> $_tf
+		else
+			echo "missing policy config"
+			rm -f $_tf
+			return 1
+		fi
+	fi
+	echo "" >> $_tf
+	if [ ! -z $_exten ]; then
+		if [ -f $HOME/config/$_exten ]; then
+			echo "[ $_exten ]" >> $_tf
+			cat $HOME/config/$_exten >> $_tf
+			# SAN MUST ALWAY BE DIRECTLY AFTER extensions
+			if [ ! -z "$_san" ]; then
+				# must always be in teh cert_ext section
+				echo "subjectAltName = @altname" >> $_tf
+				echo ""
+				echo "[ altname ]" >> $_tf
+				for i in $_san; do
+					echo $i >> $_tf
+				done
+			fi
+		else
+			echo "missing exten config"
+			rm -f $_tf
+			return 1
+		fi
+	fi
+	echo $_tf
+	return 0
 }
 
 function key_pass {
@@ -266,6 +370,10 @@ function create_key {
 	if [ -z "$_bits" ]; then
 		_bits=$DEFBITS
 	fi
+	if [ -f $KEYDIR/$_n.key ]; then
+		echo "key already exists.  delete first"
+		return 1
+	fi
 	key_pass $_ca $_n
 	if [ $? -ne 0 ]; then
 		echo "error generating key pass"
@@ -301,7 +409,6 @@ function create_root {
 				;;
 		esac
 	done
-set -x
 	_n=$ROOTCERT
 	if [ -z "$_n" ]; then
 		echo "no name specified"
@@ -334,13 +441,11 @@ set -x
 		_days=$CERTDAYS
 	fi
 	prep_serial $_ca
-	_tf=`mktemp` || die 1 "create_root: mktemp"
-	echo # generated config > $_tf
-	cat $HOME/config/macros >> $_tf
-	cat $HOME/config/req >> $_tf
-	cat $HOME/config/req_dn >> $_tf
-	cat $HOME/config/extension_ca >> $_tf
-cat $_tf >&2
+	_tf=`build_config $_ca "req" -policy policy_match -ext extension_ca -attrs req_attrs -dn req_dn`
+	if [ $? -ne 0 ]; then
+		# error building config
+		return 1
+	fi
 	out=`$OS req -config $_tf -new -x509 -key $_key -passin file:$KEYDIR/${_n%%.crt}.pass -out $CERTDIR/$_n -days $_days`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
@@ -384,7 +489,9 @@ function create_csr {
 				_days=$2
 				shift; shift;;
 			-san)
-				_san="$_san $2"
+				if [ ! -z "$2" ]; then
+					_san="$_san $2"
+				fi
 				shift; shift;;
 			-sign)
 				_sign=1
@@ -414,107 +521,12 @@ function create_csr {
 	if [ -z "$_days" ]; then
 		_days=$CERTDAYS
 	fi
-	_tf=`mktemp` || die 1 "create_csr: mktemp"
-	echo # generated config > $_tf
-	cat $HOME/config/macros >> $_tf
-	cat $HOME/config/req >> $_tf
-	cat $HOME/config/req_dn >> $_tf
-	if [ $_sign -eq 0 ]; then
-		cat $HOME/config/extension_cert >> $_tf
-	else
-		cat $HOME/config/extension_ca >> $_tf
-	fi
-	if [ ! -z "$_san" ]; then
-		# must always be in the cert_ext section
-		echo "subjectAltname = @altname" >> $_tf
-		echo ""
-		echo "[ altname ]" >> $_tf
-		for i in $_san; do
-			echo $i >> $_tf
-		done
+	_tf=`build_config $_ca "req" -policy policy_match -ext extension_cert -a req_attrs -dn req_dn -san "$_san"`
+	if [ $? -ne 0 ]; then
+		echo $_tf
+		return 1
 	fi
 	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
-	if [ $? -ne 0 ]; then
-		cat $_tf >&2
-		rm -f $_tf
-		echo $out
-		return 1
-	fi
-	echo $REQDIR/$_n.req
-	rm -f $_tf
-	return 0
-}
-
-function create_cert {
-	local _ca=$1; shift;
-	local _n
-	local _sans
-	local _self=0
-	local _csr
-	while [ $# -ne 0 ]; do
-		case "$1" in
-			-name)
-				_n=$2
-				shift; shift;;
-			-days)
-				_days=$2
-				shift; shift;;
-			-san)
-				_san="$_san $2"
-				shift; shift;;
-			-self)
-				_self=1
-				shift;;
-			-csr)
-				_csr=$2
-				shift; shift;;
-			*)
-				echo "unknown option $1"
-				return 1
-				;;
-		esac
-	done
-	if [ -z "$_n" ]; then
-		echo "no name specified"
-		return 1
-	fi
-
-	if [ -z "$_csr" ]; then
-		echo "no csr specified"
-		return 1
-	fi
-	if [ ! -f $_csr ]; then
-		if [ -f $REQDIR/$_csr ]; then
-			_csr=$REQDIR/$_csr
-		else
-			echo "cannot find csr file"
-			return 1
-		fi
-	fi
-	if [ -z "$_days" ]; then
-		_days=$CERTDAYS
-	fi
-
-#XXX do work here
-	if [ -z "$_days" ]; then
-		_days=$CERTDAYS
-	fi
-	_tf=`mktemp` || die 1 "create_csr: mktemp"
-	echo # generated config > $_tf
-	cat $HOME/config/marcos >> $_tf
-	cat $HOME/config/cert >> $_tf
-	cat $HOME/config/req_dn >> $_tf
-	if [ ! -z "$_san" ]; then
-		# must always be in teh cert_ext section
-		echo "subjectAltname = @altname" >> $_tf
-		echo ""
-		echo "[ altname ]" >> $_tf
-		for i in $_san; do
-			echo $i >> $_tf
-		done
-	fi
-#XXX need root key to sign unless -self is specified
-	out=`$OS ca -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
@@ -567,7 +579,6 @@ function get_config {
 }
 
 function set_config {
-set -x
 	local _ca=$1; shift;
 	local _n
 	local _k
@@ -585,7 +596,7 @@ set -x
 			-val*)
 				_v=$2
 				shift; shift;;
-			-d*)
+			-d)
 				_d=1
 				shift;;
 			*)
@@ -606,6 +617,10 @@ set -x
 		echo "no value specified"
 		return 1
 	fi
+	if [ ! -z "$_v" -a $_d -eq 1 ]; then
+		echo "can only specify value or delete, not both"
+		return 1
+	fi
 	_tf=`mktemp` || die 1 "set_config: mktemp"
 	if [ $_d -eq 0 ]; then
 		cat $HOME/config/$_n | sed -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
@@ -615,6 +630,151 @@ set -x
 	mv -f $_tf $HOME/config/$_n
 #	cat $HOME/config/$_n >&2
 	return 0
+}
+
+function sign_req {
+	local _ca=$1; shift;
+	[ -z "$_ca" ] && return 1
+	local _n
+	local _file
+	local _days
+	local _san
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+#			-csr)
+#				_file=$2
+#				shift; shift;;
+			-days)
+				_days=$2
+				shift; shift;;
+			-san)
+				if [ ! -z "$2" ]; then
+					_san="$_san $2"
+				fi
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				return 1
+				;;
+		esac
+	done
+	if [ ! -z "$_n" -a ! -z "$_file" ]; then
+		echo "must specify name or csr"
+		return 1
+	fi
+	if [ ! -z "$_n" ]; then
+		_file=$REQDIR/$_n.req
+	fi
+	if [ ! -f $_file ]; then
+		echo "cannot find request file"
+		return 1
+	fi
+	if [ -z "$_days" ]; then
+		_days=$CERTDAYS
+	fi
+	_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert`
+	if [ $? -ne 0 ]; then
+		echo $_tf
+		return 1
+	fi
+	prep_serial $_ca
+#	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$ROOTKEY -key file:$KEYDIR/${ROOTKEY%%.key}.pass -cert $CERTDIR/$ROOTCERT -out $REQDIR/$_n.req -days $_days`
+	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$ROOTKEY -cert $CERTDIR/$ROOTCERT -in $REQDIR/$_n.req -days $_days`
+	if [ $? -ne 0 ]; then
+		cat $_tf >&2
+		rm -f $_tf
+		echo $out
+		return 1
+	fi
+	# rename req if it is in our reqdir
+	if [ ! -z "$_n" ]; then
+		mv -f $REQDIR/$_n.req $REQDIR/$_n.signed
+	fi
+	rm -f $_tf
+	return 0
+}
+
+function show_cert {
+	local _ca=$1; shift;
+	local _n
+	local _s=0
+	local _e=0
+	local _opts
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-sub*hash)
+				_opts="-subject_hash $_opts"
+				shift;;
+			-iss*hash)
+				_opts="-issuer_hash $_opts"
+				shift;;
+			-ser*)
+				_opts="-serial $_opts"
+				shift;;
+			-sub*)
+				_opts="-subject $_opts"
+				shift;;
+			-iss*)
+				_opts="-issuer $_opts"
+				shift;;
+			-fin*)
+				_opts="-fingerprint $_opts"
+				shift;;
+			-exp*)
+				_opts="-enddate $_opts"
+				shift;;
+			-email)
+				_opts="-email $_opts"
+				shift;;
+
+			*)
+				shift;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		_n="*"
+	fi
+	if [ -z "$_opts" ]; then
+		_opts="-text"
+	fi
+	for i in `find $CERTDIR/ -name $_n.crt -print`; do
+		_pn=${i##*/}
+		# skip root cert if name not specified
+		[ "$_n" == "*" -a "$_pn" == "$ROOTCERT" ] && continue;
+		echo -n "${_pn%%.req}: "
+		$OS x509 -in $i -noout $_opts
+	done
+	return 0
+}
+
+function show_requests {
+	local _ca=$1; shift;
+	local _n
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			*)
+				shift;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		_n="*"
+	fi
+	for i in `find $REQDIR/ -name $_n.req -print` ; do
+		_pn=${i##*/}
+		echo -n "${_pn%%.req}: "
+		$OS req -in $i -noout -subject
+	done
 }
 
 if [ $# -lt 2 ]; then
@@ -641,7 +801,8 @@ while [ $# -ne 0 ]; do
 			[ -z "$1" ] && die 1 "nothing to do"
 			case "$1" in
 				root)
-					out=`create_root $CA` || die 1 "$out"
+					shift;
+					out=`create_root $CA $*` || die 1 "$out"
 					# success... now eat rest of args
 					while [ $# -ne 0 ]; do shift; done
 					;;
@@ -651,15 +812,9 @@ while [ $# -ne 0 ]; do
 					# success... now eat rest of args
 					while [ $# -ne 0 ]; do shift; done
 					;;
-				req|req*)
+				req*)
 					shift;
 					out=`create_csr $CA $*` || die 1 "$out"
-					# success... now eat rest of args
-					while [ $# -ne 0 ]; do shift; done
-					;;
-				crt|cert*)
-					shift;
-					out=`create_cert $CA $*` || die 1 "$out"
 					# success... now eat rest of args
 					while [ $# -ne 0 ]; do shift; done
 					;;
@@ -682,16 +837,16 @@ while [ $# -ne 0 ]; do
 							cat $HOME/config/macros
 							;;
 						pol*)
-							cat $HOME/config/policy_*
-#							for i in `ls $HOME/config/policy_*`; do
-#								echo ${i##*/}
-#							done
+							for i in `ls $HOME/config/policy_*`; do
+								echo "___ ${i##*/} ___"
+								cat $i
+							done
 							;;
 						ext*)
-							cat $HOME/config/extension_*
-#							for i in `ls $HOME/config/extension_*`; do
-#								echo ${i##*/}
-#							done
+							for i in `ls $HOME/config/extension_*`; do
+								echo "___ ${i##*/} ___"
+								cat $i
+							done
 							;;
 						*)
 							die 1 "Unknown command $2"
@@ -748,6 +903,38 @@ while [ $# -ne 0 ]; do
 					while [ $# -ne 0 ]; do shift; done
 					;;
 
+				*)
+					die 1 "Unknown command $1"
+					shift;;
+			esac
+			while [ $# -ne 0 ]; do shift; done
+			;;
+		sign)
+			shift;
+			[ -z "$1" ] && die 1 "noting to do"
+			out=`sign_req $CA $*` || die 1 "$out"
+			echo $out
+			while [ $# -ne 0 ]; do shift; done
+			;;
+		show)
+			shift;
+			[ -z "$1" ] && die 1 "nothing to do"
+			case "$1" in
+				root)
+					shift;
+					show_cert $CA -name ${ROOTCERT%%.crt} $*
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				req*)
+					shift;
+					show_requests $CA $*
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				crt|cert*)
+					shift;
+					show_cert $CA $*
+					while [ $# -ne 0 ]; do shift; done
+					;;
 				*)
 					die 1 "Unknown command $1"
 					shift;;
