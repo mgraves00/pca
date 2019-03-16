@@ -42,10 +42,10 @@ function syntax {
 #	echo "  <ca> import pol|ext <-name name> <-file file>"
 #	echo "  <ca> import req <-name name> <-file file>"
 #	echo "  <ca> import key <-name name> <-file file>"
-#	echo "  <ca> import pkcs12 <-name name> <-file file>"
 	echo "  <ca> create root [-days #] [-bits #]"
 	echo "  <ca> create crl"
 	echo "  <ca> create key <-name name> [-bits #]"
+	echo "  <ca> create chain"
 	echo "  <ca> create req[uest] <-name name> <-key file | -newkey [#bits]> [-sign] [-days #] [-san val ...] [-cn name] [-cc x] [-sp x] [-c x] [-o x] [-ou x] [-em x]"
 	echo "  <ca> show crl [-issure] [-hash] [-fingerprint] [-num] [-last] [-next]"
 	echo "  <ca> show req [-name name]"
@@ -54,6 +54,8 @@ function syntax {
 	echo "  <ca> sign <-name name> [-self] [-days] [-san val ...]"
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
+	echo "  <ca> export pkcs12 <-name name> <-pass -|file:filename|password> [-chain] [-overwrite]"
+	echo "  <ca> import pkcs12 <-name name> <-pass -|file:filename|password> [-chain] [-overwrite]"
 	echo ""
 	die $_rc
 }
@@ -88,6 +90,40 @@ function read_config {
 ##		export $k=$v
 #	done
 #	IFS=$_ofs
+	return 0
+}
+
+function read_from_stdin {
+	local _prompt=$1; shift
+	local _noecho=0
+	local _default
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-noecho)
+				_noecho=1
+				shift;;
+			-default)
+				_default=$2
+				shift; shift;;
+			*)
+				echo "unknown option $1"
+				shift;
+				return 1
+		esac
+	done
+	if [ ! -z "$_default" ]; then
+		_prompt="$_prompt [$_default]"
+	fi
+	set -o noglob
+	[ $_noecho -eq 1 ] && stty -echo
+	read -r _resp?"$_prompt " >&2
+	[ $_noecho -eq 1 ] && stty echo
+	set +o noglob
+	echo >&2
+	if [ -z "$_resp" -a ! -z $_default ]; then
+		_resp=$_default
+	fi
+	echo $_resp
 	return 0
 }
 
@@ -744,28 +780,28 @@ function show_cert {
 				_n=$2
 				shift; shift;;
 			-sub*hash)
-				_opts="-subject_hash $_opts"
+				_opts="$_opts -subject_hash"
 				shift;;
 			-iss*hash)
-				_opts="-issuer_hash $_opts"
+				_opts="$_opts -issuer_hash"
 				shift;;
 			-ser*)
-				_opts="-serial $_opts"
+				_opts="$_opts -serial"
 				shift;;
 			-sub*)
-				_opts="-subject $_opts"
+				_opts="$_opts -subject"
 				shift;;
 			-iss*)
-				_opts="-issuer $_opts"
+				_opts="$_opts -issuer"
 				shift;;
 			-fin*)
-				_opts="-fingerprint $_opts"
+				_opts="$_opts -fingerprint"
 				shift;;
 			-exp*)
-				_opts="-enddate $_opts"
+				_opts="$_opts -enddate"
 				shift;;
 			-email)
-				_opts="-email $_opts"
+				_opts="$_opts -email"
 				shift;;
 			*)
 				shift;;
@@ -777,13 +813,22 @@ function show_cert {
 	if [ -z "$_opts" ]; then
 		_opts="-text"
 	fi
+	set -o noglob
 	for i in `find $CERTDIR/ -name $_n.crt -print`; do
 		_pn=${i##*/}
 		# skip root cert if name not specified
 		[ "$_n" == "*" -a "$_pn" == "$ROOTCERT" ] && continue;
 		echo -n "${_pn%%.req}: "
-		$OS x509 -in $i -noout $_opts
+		if [ "$_opts" == "-text" ]; then
+			# we want to see pretty formating
+			$OS x509 -in $i -noout $_opts
+		else
+			# we want to see condinsed formating
+			out=`$OS x509 -in $i -noout $_opts`
+			echo $out
+		fi
 	done
+	set +o noglob
 	return 0
 }
 
@@ -993,45 +1038,18 @@ function delete_file {
 	done
 	return 0
 }
-function export_pkcs12 {
-set -x
-	local _ca=$1; shift;
-	local _n
-	local _f
-	local _tf
-	local _ow=0
-	local _p=""
-	[ -z "$_ca" ] && return 1
-	while [ $# -ne 0 ]; do
-		case "$1" in
-			-name)
-				_n=$2
-				shift; shift;;
-			-file)
-				_f=$2
-				shift; shift;;
-			-overwrite)
-				_ow=1
-				shift;;
-			-pass)
-				_p=$2
-				shift; shift;;
-			*)
-				shift;;
-		esac
-	done
-	if [ -z "$_n" ]; then
-		echo "must specify name"
-		return 1
-	fi
-	if [ -f "$_f" ]; then
-		echo "must specify file"
+
+function get_pass_from_input {
+	local _p=$1
+	local _pf
+	if [ -z $_p ]; then
+		echo "nothing to do"
 		return 1
 	fi
 	_pf=`mktemp tmp.XXXXXXXX` || die 1 "export_pkcs12: mktemp"
 	case "$_p" in
 		-) # read from stdin
-			_p=`read_from_stdin "Enter Password: " 1`
+			_p=`read_from_stdin "Enter Password:" -noecho`
 			cat <<EOF>$_pf
 $_p
 EOF
@@ -1052,16 +1070,65 @@ $_p
 EOF
 			;;
 	esac
-	if [ -s "$_pf" ]; then
-		echo "no password specified"
-		cat $_pf >&2
-		rm -f $_pf
+	echo $_pf
+	return 0
+}
+
+function export_pkcs12 {
+	local _ca=$1; shift;
+	local _n
+	local _f
+	local _tf
+	local _ow=0
+	local _p=""
+	local _ch=0
+	local _chain=""
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-file)
+				_f=$2
+				shift; shift;;
+			-ov*)
+				_ow=1
+				shift;;
+			-pass)
+				_p=$2
+				shift; shift;;
+			-ch*)
+				_ch=1
+				shift;;
+			*)
+				shift;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "must specify name"
 		return 1
 	fi
-	if [ $_ow -eq 1 -a -f $_f ]; then
-		rm -f $_f
-	else
-		echo "file already exists.  use -overwrite to overwrite"
+	if [ -z "$_f" ]; then
+		echo "must specify file"
+		return 1
+	fi
+	if [ -f $_f ]; then 
+		if [ $_ow -ne 1 ]; then
+			echo "file already exists.  use -overwrite to overwrite"
+			rm -f $_pf
+			return 1
+		else
+			rm -f $_f
+		fi
+	fi
+	_pf=`get_pass_from_input "$_p"`
+	if [ $? -ne 0 ]; then
+		echo $_pf
+		return 1
+	fi
+	if [ ! -s "$_pf" ]; then
+		echo "no password specified"
 		rm -f $_pf
 		return 1
 	fi
@@ -1075,16 +1142,11 @@ EOF
 		rm -f $_pf
 		return 1
 	fi
-	_tf=`build_config $_ca "ca"`
-	if [ $? -ne 0 ]; then
-		echo $_tf
-		rm -f $_pf
-		return 1
+	if [ $_ch -eq 1 ]; then
+	_chain="-chain -CAfile $CERTDIR/${ROOTCERT%%.crt}-chain.pem"
 	fi
-	out=`$OS pkcs12 -config $_tf -export -aes256 -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout $_pf`
-#XXX chain
+	out=`$OS pkcs12 -aes256 -export -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout file:$_pf $_chain`
 	if [ $? -ne 0 ]; then
-		rm -f $_tf
 		rm -f $_pf
 		echo "error extracting cert"
 		echo $out
@@ -1101,6 +1163,7 @@ function import_pkcs12 {
 	local _tf
 	local _ow=0
 	local _p
+	local _pf
 	[ -z "$_ca" ] && return 1
 	while [ $# -ne 0 ]; do
 		case "$1" in
@@ -1124,33 +1187,44 @@ function import_pkcs12 {
 		echo "must specify name"
 		return 1
 	fi
-	if [ -f "$_f" ]; then
+	if [ ! -f "$_f" ]; then
 		echo "must specify file"
 		return 1
 	fi
-#XXX password
-	if [ $_ow -eq 1 -a -f $CERTDIR/$_n.crt ]; then
-		rm -f $CERTDIR/$_n.crt
-	else
-		echo "cert already exists.  use -overwrite to overwrite"
-		return
-	fi
-	if [ $_ow -eq 1 -a -f $KEYDIR/$_n.key ]; then
-		rm -f $KEYDIR/$_n.key
-		rm -f $KEYDIR/$_n.pass
-	else
-		echo "key already exists.  use -overwrite to overwrite"
-		return
-	fi
-	_tf=`build_config $_ca "pkcs12"`
+	_pf=`get_pass_from_input "$_p"`
 	if [ $? -ne 0 ]; then
-		echo $_tf
+		echo $_pf
 		return 1
 	fi
+	if [ ! -s "$_pf" ]; then
+		echo "no password specified"
+		rm -f $_pf
+		return 1
+	fi
+	if [ -f $CERTDIR/$_n.crt ]; then
+		if [ $_ow -eq 1 ]; then
+			rm -f $CERTDIR/$_n.crt
+		else
+			echo "cert already exists.  use -overwrite to overwrite"
+			rm -f $_pf
+			return 1
+		fi
+	fi
+	if [ -f $KEYDIR/$_n.key ]; then
+		if [ $_ow -eq 1 ]; then
+			rm -f $KEYDIR/$_n.key
+			rm -f $KEYDIR/$_n.pass
+		else
+			echo "key already exists.  use -overwrite to overwrite"
+			rm -f $_pf
+			return 1
+		fi
+	fi
 	# extract certificate
-	out=`$OS pkcs12 -config $_tf -in $_f -nokeys -clcets -out $CERTDIR/$_n.crt`
+	out=`$OS pkcs12 -in $_f -nokeys -clcerts -out $CERTDIR/$_n.crt -passin file:$_pf`
 	if [ $? -ne 0 ]; then
 		rm -f $CERTDIR/$_n.crt
+		rm -f $_pf
 		echo "error extracting cert"
 		echo $out
 		return 1
@@ -1159,18 +1233,72 @@ function import_pkcs12 {
 	key_pass $_ca $_n
 	if [ $? -ne 0 ]; then
 		echo "error generating key pass"
+		rm -f $_pf
 		return 1
 	fi
 	# extract key
-	out=`$OS pkcs12 -config $_tf -in $_f -nocerts -passout file:$KEYDIR/$_n.pass -out $KEYDIR/$_n.key`
+	out=`$OS pkcs12 -in $_f -nocerts -passout file:$KEYDIR/$_n.pass -out $KEYDIR/$_n.key -passin file:$_pf`
 	if [ $? -ne 0 ]; then
 		rm -f $KEYDIR/$_n.pass
 		rm -f $KEYDIR/$_n.key
+		rm -f $_pf
 		echo "error extracting key"
 		echo $out
 		return 1
 	fi
+#XXX chain
+#XXX what do we do?  should we import the chain?  should it overwrite the existing chain?
+#XXX 
+	rm -f $_pf
 	return 0
+}
+
+function check_root {
+set -x
+	local _ca=$1; shift
+	local _n=$1
+	local _sub
+	local _iss
+	[ -z "$_ca" ] && return 1
+	[ -z "$_n" ] && return 2
+	out=`show_cert $_ca -name $_n -subject -issuer`
+	if [ $? -ne 0 ]; then
+		# error getting cert
+		echo $out
+		return 2
+	fi
+	out=`echo $out | sed -n -r 's/.*subject=[[:space:]]?([^ ]+)[[:space:]]+issuer=[[:space:]]?([^$]+)/\1:\2/p'`
+	_sub=`echo $out | cut -f1 -d:`
+	_iss=`echo $out | cut -f2 -d:`
+	if [ "$_sub" == "$_iss" ]; then
+		# we have root
+		return 0
+	fi
+	# not root
+	return 1
+}
+
+
+
+function generate_chain {
+	cat $CERTDIR/$ROOTCERT > $CERTDIR/${ROOTCERT%%.crt}-chain.pem
+	return 0
+# XXX FIXME
+set -x
+	local _ca=$1
+	[ -z "$_ca" ] && return 1
+	out=`check_root $_ca ${ROOTCERT%%.crt}`
+	case "$?" in
+		0)	# found root
+			;;
+		1)	# not found root
+			;;
+		*)	# internal error
+			echo $out
+			return 1
+			;;
+	esac
+	
 }
 
 ### MAIN
@@ -1219,6 +1347,12 @@ while [ $# -ne 0 ]; do
 				crl)
 					shift;
 					out=`create_crl $CA $*` || die 1 "$out"
+					# success... now eat rest of args
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				chain)
+					shift;
+					out=`generate_chain $CA $*` || die 1 "$out"
 					# success... now eat rest of args
 					while [ $# -ne 0 ]; do shift; done
 					;;
@@ -1362,7 +1496,7 @@ while [ $# -ne 0 ]; do
 			case "$1" in
 				pkcs12)
 					shift;
-					out=`export_pkcs12 $CA $*` || dir 1 "$out"
+					out=`export_pkcs12 $CA $*` || die 1 "$out"
 					echo $out
 					while [ $# -ne 0 ]; do shift; done
 					;;
@@ -1377,7 +1511,7 @@ while [ $# -ne 0 ]; do
 			case "$1" in
 				pkcs12)
 					shift;
-					out=`import_pkcs12 $CA $*` || dir 1 "$out"
+					out=`import_pkcs12 $CA $*` || die 1 "$out"
 					echo $out
 					while [ $# -ne 0 ]; do shift; done
 					;;
