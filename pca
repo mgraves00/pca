@@ -2,7 +2,7 @@
 
 # Personal Certificate Authority
 #
-# Copyright (c) 2018 Michael Graves <mgraves@brainfat.net>
+# Copyright (c) 2018 Michael Graves <mg@brainfat.net>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -46,7 +46,7 @@ function syntax {
 	echo "  <ca> create crl"
 	echo "  <ca> create key <-name name> [-bits #]"
 	echo "  <ca> create chain"
-	echo "  <ca> create req[uest] <-name name> <-key file | -newkey [#bits]> [-sign] [-days #] [-san val ...] [-cn name] [-cc x] [-sp x] [-c x] [-o x] [-ou x] [-em x]"
+	echo "  <ca> create req[uest] <-name name> <-key file | -newkey [#bits]> [-sign] [-days #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
 	echo "  <ca> show crl [-issure] [-hash] [-fingerprint] [-num] [-last] [-next]"
 	echo "  <ca> show req [-name name]"
 	echo "  <ca> show root [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
@@ -84,12 +84,6 @@ function read_config {
 		die 1 "cannot read config"
 	fi
 	. $_root/config/macros
-#	local _ofs=$IFS
-#	cat $_root/config.env | grep -v "^#" | while IFS="=" read k v; do
-#		_cfg[$k]=$v
-##		export $k=$v
-#	done
-#	IFS=$_ofs
 	return 0
 }
 
@@ -204,6 +198,7 @@ default_bits	= \$ENV::DEFBITS
 default_md		= \$ENV::DEFMD
 string_mask		= utf8only
 nsCertType		= client, email, server
+prompt			= no
 EOF
 	cat <<EOF> $_root/config/req_dn
 commonName                      = Common Name (eg, fully qualified host name)
@@ -292,9 +287,7 @@ function build_config {
 				_attrs=$2
 				shift; shift;;
 			-s*)
-				if [ ! -z "$2" ]; then
-					_san="$_san $2"
-				fi
+				_san=$2
 				shift; shift;;
 			*)
 				echo "unknown option $1"
@@ -317,14 +310,18 @@ function build_config {
 		echo "[ this_ca ]" >> $_tf
 	fi
 	cat $HOME/config/prog_$_prog >> $_tf
-	[ ! -z "$_dn" ] && echo "distinguished_name=$_dn" >> $_tf
+	[ ! -z "$_dn" ] && echo "distinguished_name=req_dn" >> $_tf
 	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
 	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
-	[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
+#	if [ $_prog == "req" ]; then
+#		[ ! -z "$_exten" ] && echo "req_extensions=$_exten" >> $_tf
+#	else
+		[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
+#	fi
 	if [ ! -z "$_dn" ]; then
-		if [ -f $HOME/config/$_dn ]; then
-			echo "[ $_dn ]" >> $_tf
-			cat $HOME/config/$_dn >> $_tf
+		if [ -f $_dn ]; then
+			echo "[ req_dn ]" >> $_tf
+			cat $_dn >> $_tf
 		else
 			echo "missing DN config"
 			rm -f $_tf
@@ -363,10 +360,7 @@ function build_config {
 				# must always be in teh cert_ext section
 				echo "subjectAltName = @altname" >> $_tf
 				echo ""
-				echo "[ altname ]" >> $_tf
-				for i in $_san; do
-					echo $i >> $_tf
-				done
+				cat $_san >> $_tf
 			fi
 		else
 			echo "missing exten config"
@@ -508,10 +502,18 @@ function create_req {
 	local _n
 	local _key
 	local _days
-	local _san
 	local _tf
 	local _bits
 	local _sign=0
+	local _san
+	local _cn
+	local _ct
+	local _sp
+	local _co
+	local _or
+	local _ou
+	local _em
+	
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -546,6 +548,27 @@ function create_req {
 			-sign)
 				_sign=1
 				shift;;
+			-co)		# Country
+				_co=$2
+				shift; shift;;
+			-cn)		# Common Name
+				_cn=$2
+				shift; shift;;
+			-ct)		# City / Town
+				_ct=$2
+				shift; shift;;
+			-sp)		# State / Province
+				_sp=$2
+				shift; shift;;
+			-or)		# Business / Organization
+				_or=$2
+				shift; shift;;
+			-ou)		# Organization Unit
+				_ou=$2
+				shift; shift;;
+			-em)		# Email
+				_em=$2
+				shift; shift;;
 			*)
 				echo "unknown option $1"
 				return 1
@@ -571,16 +594,33 @@ function create_req {
 	if [ -z "$_days" ]; then
 		_days=$CERTDAYS
 	fi
+	local _tf=`mktemp -p $REQDIR $_n.XXXXXX` || die 1 "create_req: mktemp"
+	# create req_file
+	echo "# DN attrs for $_n" > $_tf
+	[ ! -z "$_cn" ] && echo "commonName=$_cn" >> $_tf
+	[ ! -z "$_or" ] && echo "organizationName=$_or" >> $_tf
+	[ ! -z "$_ou" ] && echo "organizationalUnitName=$_ou" >> $_tf
+	[ ! -z "$_ct" ] && echo "localityName=$_ct" >> $_tf
+	[ ! -z "$_sp" ] && echo "stateOrProvinceName=$_sp" >> $_tf
+	[ ! -z "$_em" ] && echo "emailAddress=$_em" >> $_tf
+	mv -f $_tf $REQDIR/$_n.dn
+	if [ ! -z "$_san" ]; then
+		echo "[ altname ]" > $REQDIR/$_n.san
+		for i in $_san; do
+			echo $i >> $REQDIR/$_n.san
+		done
+	fi
+
 	if [ $_sign -eq 1 ]; then
-		_tf=`build_config $_ca "req" -policy policy_match -ext extension_ca -a req_attrs -dn req_dn -san "$_san"`
+		_tf=`build_config $_ca "req" -policy policy_match -ext extension_ca -a req_attrs -dn $REQDIR/$_n.dn`
 	else
-		_tf=`build_config $_ca "req" -policy policy_match -ext extension_cert -a req_attrs -dn req_dn -san "$_san"`
+		_tf=`build_config $_ca "req" -policy policy_match -ext extension_cert -a req_attrs -dn $REQDIR/$_n.dn`
 	fi
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
 	fi
-	out=`$OS req -config $_tf -new -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+	out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
@@ -722,11 +762,6 @@ function sign_req {
 			-days)
 				_days=$2
 				shift; shift;;
-			-san)
-				if [ ! -z "$2" ]; then
-					_san="$_san $2"
-				fi
-				shift; shift;;
 			*)
 				echo "unknown option $1"
 				return 1
@@ -747,7 +782,10 @@ function sign_req {
 	if [ -z "$_days" ]; then
 		_days=$CERTDAYS
 	fi
-	_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert`
+	if [ -f $REQDIR/$_n.san ]; then
+		_san="-san $REQDIR/$_n.san"
+	fi
+	_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert $_san`
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
@@ -862,6 +900,10 @@ function revoke_cert {
 		return 1
 	fi
 	if [ ! -z "$_n" ]; then
+		if [ ! -f "$CERTDIR/$_n.crt" ]; then
+			echo "cannot find cert by name $_n"
+			return 1
+		fi
 		out=`show_cert $_ca -name $_n -serial`
 		if [ $? -ne 0 ]; then
 			echo "cannot find cert with by name $_n"
@@ -1001,7 +1043,7 @@ function delete_file {
 	case "$_t" in
 		req*)
 			_d=$REQDIR
-			_fe='-name $_n.req -o -name $_n.signed -o -name $_n.dn'
+			_fe='-name $_n.req -o -name $_n.signed -o -name $_n.dn -o -name $_n.san'
 			;;
 		key)
 			_d=$KEYDIR
@@ -1099,7 +1141,8 @@ function export_pkcs12 {
 				_p=$2
 				shift; shift;;
 			-ch*)
-				_ch=1
+				die 1 "Not implemented"
+#				_ch=1
 				shift;;
 			*)
 				shift;;
@@ -1179,6 +1222,9 @@ function import_pkcs12 {
 			-pass)
 				_p=$2
 				shift; shift;;
+			-chain)
+				die 1 "Not implemented"
+				shift;;
 			*)
 				shift;;
 		esac
@@ -1254,7 +1300,6 @@ function import_pkcs12 {
 }
 
 function check_root {
-set -x
 	local _ca=$1; shift
 	local _n=$1
 	local _sub
