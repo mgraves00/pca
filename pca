@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=0.9
+VER=0.9.1
 NAME=${0##*/}
 OS="openssl"
 
@@ -424,8 +424,8 @@ function create_key {
 		return 1
 	fi
 	local _tf=`mktemp -p $KEYDIR $_n.XXXXXX` || die 1 "create_key: mktemp"
-	$OS genrsa -out $_tf $_bits
-	$OS rsa -aes256 -passout file:$KEYDIR/$_n.pass -in $_tf -out $KEYDIR/$_n.key	
+	$OS genrsa -out $_tf $_bits >/dev/null 2>&1
+	$OS rsa -aes256 -passout file:$KEYDIR/$_n.pass -in $_tf -out $KEYDIR/$_n.key >/dev/null 2>&1
 	rm -f $_tf
 	chmod 400 $KEYDIR/$_n.key
 	echo $KEYDIR/$_n.key
@@ -449,31 +449,37 @@ function create_root {
 				_bits=$2
 				shift; shift;;
 			-co)		# Country
-				_req="$_req -co '$2'"
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -co $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-cn)		# Common Name
-				_req="$_req -cn \"$2\""
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -cn $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-ct)		# City / Town
-				_req="$_req -ct \"$2\""
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -ct $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-sp)		# State / Province
-				_req="$_req -sp \"$2\""
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -sp $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-or)		# Business / Organization
-				_req="$_req -or \"$2\""
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -or $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-ou)		# Organization Unit
-				_req="$_req -ou \"$2\""
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_req="$_req -ou $_x"
 				_dn=1
-				shift; shift;;
+				;;
 			-em)		# Email
-				_req="$_req -em \"$2\""
+				_req="$_req -em $2"
 				_dn=1
 				shift; shift;;
 			*)
@@ -523,7 +529,7 @@ function create_root {
 	fi
 	echo $out
 	# clean up request cruft
-	out=`delete_file $_ca req -name ${ROOTCERT%%.crt} >/dev/null`
+	out=`delete_file $_ca req -name ${ROOTCERT%%.crt} >/dev/null 2>&1`
 	return 0
 }
 
@@ -583,23 +589,29 @@ function create_req {
 				_sign=1
 				shift;;
 			-co)		# Country
-				_co=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_co=$_x;
+				;;
 			-cn)		# Common Name
-				_cn=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_cn=$_x
+				;;
 			-ct)		# City / Town
-				_ct=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_ct=$_x
+				;;
 			-sp)		# State / Province
-				_sp=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_sp=$_x
+				;;
 			-or)		# Business / Organization
-				_or=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_or=$_x
+				;;
 			-ou)		# Organization Unit
-				_ou=$2
-				shift; shift;;
+				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
+				_ou=$_x
+				;;
 			-em)		# Email
 				_em=$2
 				shift; shift;;
