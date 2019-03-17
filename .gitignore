@@ -2,3 +2,4 @@ TODO
 .git
 .gitignore
 .regress-tmp.*
+.*.ca
