@@ -821,7 +821,7 @@ function sign_req {
 	local _file
 	local _days
 	local _san
-	lcoal _sign=0
+	local _sign=0
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
