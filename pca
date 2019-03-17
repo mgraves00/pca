@@ -17,6 +17,8 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
+VER=0.9
+NAME=${0##*/}
 OS="openssl"
 
 function die {
@@ -31,31 +33,29 @@ function die {
 
 function syntax {
 	local _rc=${1:?0}
-	echo "${0##/} <ca> <command> [options]"
+	echo "$NAME $VER - Personal Certificate Authroity"
+	echo "$NAME <ca> <command> [options]"
 	echo "Commands:"
 	echo "  <ca> init"
-	echo "  <ca> config list <macros | pol[icy] | ext[ension]>"
+	echo "  <ca> config list <mac[ros] | pol[icy] | ext[ension] | prog[ram]>"
 	echo "  <ca> config get macro <-key key> <-value>"
-	echo "  <ca> config set macro <-key key> <-value val>"
-	echo "  <ca> config get pol|ext <-name name> <-key key> <-value>"
-	echo "  <ca> config set pol|ext <-name name> <-key key> <-value val>"
-#	echo "  <ca> import pol|ext <-name name> <-file file>"
-#	echo "  <ca> import req <-name name> <-file file>"
-#	echo "  <ca> import key <-name name> <-file file>"
-	echo "  <ca> create root [-days #] [-bits #]"
+	echo "  <ca> config set macro [-a|-d] <-key key> <-value val>"
+	echo "  <ca> config get pol|ext|prog <-name name> <-key key> <-value>"
+	echo "  <ca> config set pol|ext|prog [-a|-d] <-name name> <-key key> <-value val>"
+	echo "  <ca> create root [-days #] [-bits #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
 	echo "  <ca> create crl"
 	echo "  <ca> create key <-name name> [-bits #]"
 	echo "  <ca> create chain"
-	echo "  <ca> create req[uest] <-name name> <-key file | -newkey [#bits]> [-sign] [-days #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
-	echo "  <ca> show crl [-issure] [-hash] [-fingerprint] [-num] [-last] [-next]"
+	echo "  <ca> create req[uest] <-name name> <-key file | -newkey [#bits]> [-days #] [-cn name] [-co x] [-sp x] [-ct x] [-or x] [-ou x] [-em x] [ -san val ... ]"
+	echo "  <ca> show crl [-issuer] [-hash] [-fingerprint] [-num] [-last] [-next]"
 	echo "  <ca> show req [-name name]"
 	echo "  <ca> show root [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
 	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
-	echo "  <ca> sign <-name name> [-self] [-days] [-san val ...]"
+	echo "  <ca> sign <-name name> [-sign] [-days] [-san val ...]"
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
-	echo "  <ca> export pkcs12 <-name name> <-pass -|file:filename|password> [-chain] [-overwrite]"
-	echo "  <ca> import pkcs12 <-name name> <-pass -|file:filename|password> [-chain] [-overwrite]"
+	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
+	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
 	echo ""
 	die $_rc
 }
@@ -83,6 +83,7 @@ function read_config {
 	if [ ! -f $_root/config/macros ]; then
 		die 1 "cannot read config"
 	fi
+	# add macros to environment to be called directly
 	. $_root/config/macros
 	return 0
 }
@@ -124,10 +125,14 @@ function read_from_stdin {
 function prep_serial {
 	local _ca=$1; shift;
 	[ -z "$_ca" ] && return 1
+	# create a random serial number.
+	# XXX though unlikely, we should probably verify it hasn't been used
 	$OS rand -hex 8 > $DBDIR/serial.txt
 	return 0
 }
 
+# create the directory structure and some generic config files
+# with semi-sane defaults
 function init_ca {
 	local _ca=$1
 	local _root
@@ -189,7 +194,6 @@ default_bits	= \$ENV::DEFBITS
 default_crl_days	= \$ENV::CRLDAYS
 default_days	= \$ENV::CERTDAYS
 string_mask		= utf8only
-nsCertType		= client, email, server
 EOF
 
 	cat <<EOF> $_root/config/prog_req
@@ -197,12 +201,9 @@ default_days	= \$ENV::CERTDAYS
 default_bits	= \$ENV::DEFBITS
 default_md		= \$ENV::DEFMD
 string_mask		= utf8only
-nsCertType		= client, email, server
 prompt			= no
 EOF
 	cat <<EOF> $_root/config/req_dn
-commonName                      = Common Name (eg, fully qualified host name)
-commonName_max                  = 64
 countryName                     = Country Name (2 letter code)
 countryName_default             = XX
 countryName_min                 = 2
@@ -214,6 +215,8 @@ localityName                    = Locality Name (eg, city)
 0.organizationName_default      = None
 organizationalUnitName          = Organizational Unit Name (eg, section)
 #organizationalUnitName_default =
+commonName                      = Common Name (eg, fully qualified host name)
+commonName_max                  = 64
 emailAddress                    = Email Address
 emailAddress_max                = 64
 EOF
@@ -224,24 +227,24 @@ EOF
 #unstructuredName                = An optional company name
 EOF
 	cat <<EOF> $_root/config/policy_match
-countryName	= match
-stateOrProvinceName	= optional
-localityName = optional
-organizationalName = match
-organizationalUnitName = optional
-commonName = supplied
-emailAddress = optional
-subjectAltName = optional
+countryName=match
+stateOrProvinceName=optional
+localityName=optional
+organizationName=match
+organizationalUnitName=optional
+commonName=supplied
+emailAddress=optional
+subjectAltName=optional
 EOF
 	cat <<EOF> $_root/config/policy_sign
-countryName	= optional
-stateOrProvinceName	= optional
-localityName = optional
-organizationalName = optional
-organizationalUnitName = optional
-commonName = supplied
-emailAddress = optional
-subjectAltName = optional
+countryName=optional
+stateOrProvinceName=optional
+localityName=optional
+organizationName=optional
+organizationalUnitName=optional
+commonName=supplied
+emailAddress=optional
+subjectAltName=optional
 EOF
 	cat <<EOF> $_root/config/extension_ca
 basicConstraints = critical,CA:TRUE,pathlen:\$ENV::PATHLEN
@@ -262,6 +265,7 @@ EOF
 	return 0	
 }
 
+# compile a one time use config file
 function build_config {
 	local _ca=$1; shift
 	[ -z "$_ca" ] && return 1
@@ -318,6 +322,7 @@ function build_config {
 #	else
 		[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
 #	fi
+	echo "" >> $_tf
 	if [ ! -z "$_dn" ]; then
 		if [ -f $_dn ]; then
 			echo "[ req_dn ]" >> $_tf
@@ -432,8 +437,9 @@ function create_root {
 	local _n
 	local _key
 	local _days
-	local _tf
 	local _bits
+	local _req="-selfsign"
+	local _dn=0
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-days)
@@ -441,6 +447,34 @@ function create_root {
 				shift; shift;;
 			-bits)
 				_bits=$2
+				shift; shift;;
+			-co)		# Country
+				_req="$_req -co '$2'"
+				_dn=1
+				shift; shift;;
+			-cn)		# Common Name
+				_req="$_req -cn \"$2\""
+				_dn=1
+				shift; shift;;
+			-ct)		# City / Town
+				_req="$_req -ct \"$2\""
+				_dn=1
+				shift; shift;;
+			-sp)		# State / Province
+				_req="$_req -sp \"$2\""
+				_dn=1
+				shift; shift;;
+			-or)		# Business / Organization
+				_req="$_req -or \"$2\""
+				_dn=1
+				shift; shift;;
+			-ou)		# Organization Unit
+				_req="$_req -ou \"$2\""
+				_dn=1
+				shift; shift;;
+			-em)		# Email
+				_req="$_req -em \"$2\""
+				_dn=1
 				shift; shift;;
 			*)
 				echo "unknown option $1"
@@ -470,8 +504,6 @@ function create_root {
 	else
 		_key=$KEYDIR/$ROOTKEY
 	fi
-#	if [ $ROOTKEY -ne ${_key##/} ]; then
-#	fi
 	if [ -z "$_key" ]; then
 		echo "no key specified"
 		return 1
@@ -479,21 +511,19 @@ function create_root {
 	if [ -z "$_days" ]; then
 		_days=$CERTDAYS
 	fi
-	prep_serial $_ca
-	_tf=`build_config $_ca "req" -policy policy_match -ext extension_ca -attrs req_attrs -dn req_dn`
-	if [ $? -ne 0 ]; then
-		# error building config
+	_req="-days $_days $_req"
+	if [ "$_dn" -eq 0 ]; then
+		echo "no distinguished name options specified"
 		return 1
 	fi
-	out=`$OS req -config $_tf -new -x509 -key $_key -passin file:$KEYDIR/${_n%%.crt}.pass -out $CERTDIR/$_n -days $_days`
+	out=`create_req $_ca -name ${ROOTCERT%%.crt} -key ${ROOTKEY} $_req`
 	if [ $? -ne 0 ]; then
-		cat $_tf >&2
-		rm -f $_tf
 		echo $out
 		return 1
 	fi
-	echo $REQDIR/$_n
-	rm -f $_tf
+	echo $out
+	# clean up request cruft
+	out=`delete_file $_ca req -name ${ROOTCERT%%.crt} >/dev/null`
 	return 0
 }
 
@@ -505,6 +535,7 @@ function create_req {
 	local _tf
 	local _bits
 	local _sign=0
+	local _selfsign=0
 	local _san
 	local _cn
 	local _ct
@@ -513,7 +544,6 @@ function create_req {
 	local _or
 	local _ou
 	local _em
-	
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -545,6 +575,10 @@ function create_req {
 					_san="$_san $2"
 				fi
 				shift; shift;;
+			-selfsign)
+				_sign=1
+				_selfsign=1
+				shift;;
 			-sign)
 				_sign=1
 				shift;;
@@ -597,11 +631,12 @@ function create_req {
 	local _tf=`mktemp -p $REQDIR $_n.XXXXXX` || die 1 "create_req: mktemp"
 	# create req_file
 	echo "# DN attrs for $_n" > $_tf
-	[ ! -z "$_cn" ] && echo "commonName=$_cn" >> $_tf
+	[ ! -z "$_co" ] && echo "countryName=$_co" >> $_tf
+	[ ! -z "$_sp" ] && echo "stateOrProvinceName=$_sp" >> $_tf
+	[ ! -z "$_ct" ] && echo "localityName=$_ct" >> $_tf
 	[ ! -z "$_or" ] && echo "organizationName=$_or" >> $_tf
 	[ ! -z "$_ou" ] && echo "organizationalUnitName=$_ou" >> $_tf
-	[ ! -z "$_ct" ] && echo "localityName=$_ct" >> $_tf
-	[ ! -z "$_sp" ] && echo "stateOrProvinceName=$_sp" >> $_tf
+	[ ! -z "$_cn" ] && echo "commonName=$_cn" >> $_tf
 	[ ! -z "$_em" ] && echo "emailAddress=$_em" >> $_tf
 	mv -f $_tf $REQDIR/$_n.dn
 	if [ ! -z "$_san" ]; then
@@ -620,14 +655,22 @@ function create_req {
 		echo $_tf
 		return 1
 	fi
-	out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+	if [ $_selfsign -eq 1 ]; then
+		out=`$OS req -config $_tf -new -x509 -key $_key -passin file:$KEYDIR/${_n%%.crt}.pass -out $CERTDIR/$_n.crt -days $_days`
+	else
+		out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+	fi
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
 		echo $out
 		return 1
 	fi
-	echo $REQDIR/$_n.req
+	if [ $_selfsign -eq 1 ]; then
+		echo $CERTDIR/$_n.crt
+	else
+		echo $REQDIR/$_n.req
+	fi
 	rm -f $_tf
 	return 0
 }
@@ -696,7 +739,7 @@ function set_config {
 	local _k
 	local _kv
 	local _v
-	local _d=0
+	local _adm=0
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -708,8 +751,11 @@ function set_config {
 			-val*)
 				_v=$2
 				shift; shift;;
+			-a)
+				_adm=2
+				shift;;
 			-d)
-				_d=1
+				_adm=1
 				shift;;
 			*)
 				echo "unknown option $1"
@@ -725,22 +771,34 @@ function set_config {
 		echo "no key specified"
 		return 1
 	fi
-	if [ -z "$_v" -a $_d -eq 0 ]; then
+	# make sure we are not adding the same key
+	grep -E -c "$_k[[:space:]]*=" $HOME/config/$_n >/dev/null
+	_rc=$?
+	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
+		_adm=0
+	fi
+	if [ -z "$_v" -a $_adm -eq 0 ]; then
 		echo "no value specified"
 		return 1
 	fi
-	if [ ! -z "$_v" -a $_d -eq 1 ]; then
+	if [ ! -z "$_v" -a $_adm -eq 1 ]; then
 		echo "can only specify value or delete, not both"
 		return 1
 	fi
 	_tf=`mktemp` || die 1 "set_config: mktemp"
-	if [ $_d -eq 0 ]; then
+	if [ $_adm -eq 0 ]; then
 		cat $HOME/config/$_n | sed -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
+		echo "$_k=$_v" >&2
 	else
-		cat $HOME/config/$_n | sed -r "/^$_k[[:space:]]*=/d" > $_tf
+		if [ $_adm -eq 2 ]; then
+			cat $HOME/config/$_n > $_tf
+			echo "$_k=$_v" >> $_tf
+			echo "$_k=$_v" >&2
+		else
+			cat $HOME/config/$_n | sed -r "/^$_k[[:space:]]*=/d" > $_tf
+		fi
 	fi
 	mv -f $_tf $HOME/config/$_n
-#	cat $HOME/config/$_n >&2
 	return 0
 }
 
@@ -751,17 +809,18 @@ function sign_req {
 	local _file
 	local _days
 	local _san
+	lcoal _sign=0
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
 				_n=$2
 				shift; shift;;
-#			-csr)
-#				_file=$2
-#				shift; shift;;
 			-days)
 				_days=$2
 				shift; shift;;
+			-sign)
+				_sign=1
+				shift;;
 			*)
 				echo "unknown option $1"
 				return 1
@@ -785,7 +844,11 @@ function sign_req {
 	if [ -f $REQDIR/$_n.san ]; then
 		_san="-san $REQDIR/$_n.san"
 	fi
-	_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert $_san`
+	if [ $_sign -eq 1 ]; then
+		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_ca $_san`
+	else
+		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert $_san`
+	fi
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
@@ -1428,6 +1491,12 @@ while [ $# -ne 0 ]; do
 								cat $i
 							done
 							;;
+						prog*)
+							for i in `ls $HOME/config/prog_*`; do
+								echo "___ ${i##*/} ___"
+								cat $i
+							done
+							;;
 						*)
 							die 1 "Unknown command $2"
 							;;
@@ -1445,7 +1514,7 @@ while [ $# -ne 0 ]; do
 							echo $out
 							while [ $# -ne 0 ]; do shift; done
 							;;
-						pol*|ext*)
+						pol*|ext*|prog*)
 							shift
 							out=`get_config $CA $*` || die 1 "$out"
 							# success... now eat rest of args
@@ -1469,7 +1538,7 @@ while [ $# -ne 0 ]; do
 							echo $out
 							while [ $# -ne 0 ]; do shift; done
 							;;
-						pol*|ext*)
+						pol*|ext*|prog*)
 							shift
 							out=`set_config $CA $*` || die 1 "$out"
 							# success... now eat rest of args
