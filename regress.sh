@@ -59,7 +59,7 @@ function testit {
 }
 
 # clean up from last failure
-rm -rf .$TN.ca
+#rm -rf .$TN.ca
 
 runit 0 pca $TN init
 runit 1 pca $TN init
@@ -69,8 +69,8 @@ runit 0 pca $TN config list policy
 runit 0 pca $TN config list extension
 
 # macro / policy / extension all use the same function
-testit "HOME=.$TN.ca" pca $TN config get macro -key HOME
-testit ".$TN.ca" pca $TN config get macro -key HOME -value
+testit "CAHOME=$HOME/.pca/$TN" pca $TN config get macro -key CAHOME
+testit "$HOME/.pca/$TN" pca $TN config get macro -key CAHOME -value
 testit "TEST10=10" pca $TN config set macro -a -key TEST10 -value 10
 testit "TEST10=11" pca $TN config set macro -key TEST10 -value 11
 testit "" pca $TN config set macro -d -key TEST10
