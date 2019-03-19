@@ -168,10 +168,13 @@ DBDIR=$_root/db
 LIBDIR=$_root/db/library
 CRLDIR=$_root/crl
 KEYDIR=$_root/private
-CHAIN=$_ca-chain.pem
 ROOTCERT=root-$_ca.crt
 ROOTKEY=root-$_ca.key
+SIGNCERT=root-$_ca.crt
+SIGNKEY=root-$_ca.key
 ROOTCRL=root-$_ca.crl
+CHAINFILE=$_ca-chain.pem
+CHAIN=root-$_ca.crt
 CRLDAYS=365
 CERTDAYS=365
 DEFMD=sha256
@@ -188,9 +191,9 @@ crl_dir			= \$ENV::CRLDIR
 new_certs_dir	= \$ENV::LIBDIR
 database 		= \$ENV::DBDIR/index.txt
 serial			= \$ENV::DBDIR/serial.txt
-certificate		= \$ENV::CERTDIR/\$ENV::ROOTCERT
+certificate		= \$ENV::CERTDIR/\$ENV::SIGNCERT
+private_key		= \$ENV::KEYDIR/\$ENV::SIGNKEY
 crl				= \$ENV::CRLDIR/\$ENV::ROOTCRL
-private_key		= \$ENV::KEYDIR/\$ENV::ROOTKEY
 default_md		= \$ENV::DEFMD
 default_bits	= \$ENV::DEFBITS
 default_crl_days= \$ENV::CRLDAYS
@@ -490,12 +493,12 @@ function create_root {
 				;;
 		esac
 	done
-	_n=$ROOTCERT
+	_n=$SIGNCERT
 	if [ -z "$_n" ]; then
 		echo "no name specified"
 		return 1
 	fi
-	if [ -f $CERTDIR/$ROOTCERT ]; then
+	if [ -f $CERTDIR/$SIGNCERT ]; then
 		echo "CA root certificate already exists.  aborting"
 		return 1
 	fi
@@ -503,14 +506,14 @@ function create_root {
 		# if not specified, make root key 2 * DEFBITS
 		_bits=$((DEFBITS * 2))
 	fi
-	if [ ! -f $KEYDIR/$ROOTKEY ]; then
-		_key=`create_key $_ca -name ${ROOTKEY%%.key} -bits $_bits`
+	if [ ! -f $KEYDIR/$SIGNKEY ]; then
+		_key=`create_key $_ca -name ${SIGNKEY%%.key} -bits $_bits`
 		if [ $? -ne 0 ]; then
 			echo "error creating root key"
 			return 1
 		fi
 	else
-		_key=$KEYDIR/$ROOTKEY
+		_key=$KEYDIR/$SIGNKEY
 	fi
 	if [ -z "$_key" ]; then
 		echo "no key specified"
@@ -524,14 +527,14 @@ function create_root {
 		echo "no distinguished name options specified"
 		return 1
 	fi
-	out=`create_req $_ca -name ${ROOTCERT%%.crt} -key ${ROOTKEY} $_req`
+	out=`create_req $_ca -name ${SIGNCERT%%.crt} -key ${SIGNKEY} $_req`
 	if [ $? -ne 0 ]; then
 		echo $out
 		return 1
 	fi
 	echo $out
 	# clean up request cruft
-	out=`delete_file $_ca req -name ${ROOTCERT%%.crt} >/dev/null 2>&1`
+	out=`delete_file $_ca req -name ${SIGNCERT%%.crt} >/dev/null 2>&1`
 	return 0
 }
 
@@ -696,7 +699,7 @@ function create_crl {
 		echo $_tf
 		return 1
 	fi
-	out=`$OS ca -config $_tf -gencrl -out $CRLDIR/$ROOTCRL -days $CRLDAYS -keyfile $KEYDIR/$ROOTKEY -passin file:$KEYDIR/${ROOTKEY%%.key}.pass 2>&1`
+	out=`$OS ca -config $_tf -gencrl -out $CRLDIR/$ROOTCRL -days $CRLDAYS -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass 2>&1`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
@@ -868,8 +871,8 @@ function sign_req {
 		return 1
 	fi
 	prep_serial $_ca
-	out=`$OS ca -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$ROOTKEY -passin file:$KEYDIR/${ROOTKEY%%.key}.pass -cert $CERTDIR/$ROOTCERT -days $_days`
-#	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$ROOTKEY -cert $CERTDIR/$ROOTCERT -in $REQDIR/$_n.req -days $_days`
+	out=`$OS ca -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -cert $CERTDIR/$SIGNCERT -days $_days`
+#	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -cert $CERTDIR/$SIGNCERT -in $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
@@ -932,7 +935,7 @@ function show_cert {
 	for i in `find $CERTDIR/ -name $_n.crt -print`; do
 		_pn=${i##*/}
 		# skip root cert if name not specified
-		[ "$_n" == "*" -a "$_pn" == "$ROOTCERT" ] && continue;
+		[ "$_n" == "*" -a "$_pn" == "$SIGNCERT" ] && continue;
 		echo -n "${_pn%%.req}: "
 		if [ "$_opts" == "-text" ]; then
 			# we want to see pretty formating
@@ -995,7 +998,7 @@ function revoke_cert {
 		echo $_tf
 		return 1
 	fi
-	out=`$OS ca -config $_tf -keyfile $KEYDIR/$ROOTKEY -passin file:$KEYDIR/${ROOTKEY%%.key}.pass -revoke $LIBDIR/$_s.pem`
+	out=`$OS ca -config $_tf -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -revoke $LIBDIR/$_s.pem`
 	if [ $? -ne 0 ]; then
 		cat $_tf
 		rm -f $tf
@@ -1263,7 +1266,7 @@ function export_pkcs12 {
 		return 1
 	fi
 	if [ $_ch -eq 1 ]; then
-	_chain="-chain -CAfile $CERTDIR/${ROOTCERT%%.crt}-chain.pem"
+	_chain="-chain -CAfile $CERTDIR/${SIGNCERT%%.crt}-chain.pem"
 	fi
 	out=`$OS pkcs12 -aes256 -export -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout file:$_pf $_chain`
 	if [ $? -ne 0 ]; then
@@ -1404,13 +1407,13 @@ set -x
 
 
 function generate_chain {
-#	cat $CERTDIR/$ROOTCERT > $CERTDIR/${ROOTCERT%%.crt}-chain.pem
+#	cat $CERTDIR/$SIGNCERT > $CERTDIR/${SIGNCERT%%.crt}-chain.pem
 #	return 0
 # XXX FIXME
 set -x
 	local _ca=$1
 	[ -z "$_ca" ] && return 1
-	out=`check_root $_ca ${ROOTCERT%%.crt}`
+	out=`check_root $_ca ${SIGNCERT%%.crt}`
 	case "$?" in
 		0)	# found root
 			;;
@@ -1586,7 +1589,7 @@ while [ $# -ne 0 ]; do
 			case "$1" in
 				root)
 					shift;
-					show_cert $CA -name ${ROOTCERT%%.crt} $*
+					show_cert $CA -name ${SIGNCERT%%.crt} $*
 					while [ $# -ne 0 ]; do shift; done
 					;;
 				req*)
