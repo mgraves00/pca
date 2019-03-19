@@ -55,7 +55,7 @@ function syntax {
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
-	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
+	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-overwrite]"
 	echo ""
 	die $_rc
 }
@@ -127,7 +127,7 @@ function prep_serial {
 	local _ca=$1; shift;
 	[ -z "$_ca" ] && return 1
 	# create a random serial number.
-	# XXX though unlikely, we should probably verify it hasn't been used
+# XXX though unlikely, we should probably verify it hasn't been used
 	$OS rand -hex 8 > $DBDIR/serial.txt
 	return 0
 }
@@ -173,14 +173,13 @@ ROOTKEY=root-$_ca.key
 SIGNCERT=root-$_ca.crt
 SIGNKEY=root-$_ca.key
 ROOTCRL=root-$_ca.crl
-CHAINFILE=$_ca-chain.pem
+ROOTCHAIN=$_ca-chain.pem
 CHAIN=root-$_ca.crt
 CRLDAYS=365
 CERTDAYS=365
 DEFMD=sha256
 DEFBITS=2048
 PUBLICURL=xxx
-ROOTCHAIN=xxx
 PATHLEN=1
 EOF
 
@@ -741,7 +740,7 @@ function get_config {
 		echo "no key specified"
 		return 1
 	fi
-	_kv=`cat $CAHOME/config/$_n | grep -i $_k`
+	_kv=`cat $CAHOME/config/$_n | grep -E -i "^$_k[[:space:]]*="`
 	if [ $_v -eq 0 ]; then
 		echo $_kv
 	else
@@ -789,7 +788,7 @@ function set_config {
 		return 1
 	fi
 	# make sure we are not adding the same key
-	grep -E -c "$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null
+	grep -E -c "^$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null
 	_rc=$?
 	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
 		_adm=0
@@ -1266,7 +1265,7 @@ function export_pkcs12 {
 		return 1
 	fi
 	if [ $_ch -eq 1 ]; then
-	_chain="-chain -CAfile $CERTDIR/${SIGNCERT%%.crt}-chain.pem"
+	_chain="-chain -CAfile $CERTDIR/$ROOTCHAIN"
 	fi
 	out=`$OS pkcs12 -aes256 -export -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout file:$_pf $_chain`
 	if [ $? -ne 0 ]; then
@@ -1302,9 +1301,6 @@ function import_pkcs12 {
 			-pass)
 				_p=$2
 				shift; shift;;
-			-chain)
-				die 1 "Not implemented"
-				shift;;
 			*)
 				shift;;
 		esac
@@ -1372,9 +1368,7 @@ function import_pkcs12 {
 		echo $out
 		return 1
 	fi
-#XXX chain
-#XXX what do we do?  should we import the chain?  should it overwrite the existing chain?
-#XXX 
+	# DO NOT import the chain
 	rm -f $_pf
 	return 0
 }
@@ -1407,8 +1401,13 @@ set -x
 
 
 function generate_chain {
-#	cat $CERTDIR/$SIGNCERT > $CERTDIR/${SIGNCERT%%.crt}-chain.pem
-#	return 0
+	if [ -f $CERTDIR/$ROOTCHAIN ]; then
+		rm -f $CERTDIR/$ROOTCHAIN
+	fi
+	for i in $CHAIN; do
+		cat $CERTDIR/$i >> $CERTDIR/$ROOTCHAIN
+	done
+	return 0
 # XXX FIXME
 set -x
 	local _ca=$1
