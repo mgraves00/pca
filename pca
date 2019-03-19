@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=0.9.1
+VER=0.9.2
 NAME=${0##*/}
 OS="openssl"
 
@@ -61,7 +61,7 @@ function syntax {
 }
 
 function get_root {
-	echo ".$1.ca"
+	echo "$HOME/.pca/$1"
 }
 
 function check_ca {
@@ -70,7 +70,8 @@ function check_ca {
 		echo "no CA specified"
 		return 1
 	fi
-	if [ ! -d ./.$_ca.ca ]; then
+	local _root=`get_root $_ca`
+	if [ ! -d $_root ]; then
 		echo "CA '$_ca' not found. Must first be initialzed"
 		return 1
 	fi
@@ -159,7 +160,7 @@ function init_ca {
 	cat <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
-HOME=$_root
+CAHOME=$_root
 RANDFILE=/dev/arandom
 CERTDIR=$_root/certs
 REQDIR=$_root/requests
@@ -167,6 +168,7 @@ DBDIR=$_root/db
 LIBDIR=$_root/db/library
 CRLDIR=$_root/crl
 KEYDIR=$_root/private
+CHAIN=$_ca-chain.pem
 ROOTCERT=root-$_ca.crt
 ROOTKEY=root-$_ca.key
 ROOTCRL=root-$_ca.crl
@@ -180,7 +182,7 @@ PATHLEN=1
 EOF
 
 	cat <<EOF> $_root/config/prog_ca
-dir				= \$ENV::HOME
+dir				= \$ENV::CAHOME
 certs			= \$ENV::CERTDIR
 crl_dir			= \$ENV::CRLDIR
 new_certs_dir	= \$ENV::LIBDIR
@@ -191,7 +193,7 @@ crl				= \$ENV::CRLDIR/\$ENV::ROOTCRL
 private_key		= \$ENV::KEYDIR/\$ENV::ROOTKEY
 default_md		= \$ENV::DEFMD
 default_bits	= \$ENV::DEFBITS
-default_crl_days	= \$ENV::CRLDAYS
+default_crl_days= \$ENV::CRLDAYS
 default_days	= \$ENV::CERTDAYS
 string_mask		= utf8only
 EOF
@@ -301,8 +303,8 @@ function build_config {
 	done
 	_tf=`mktemp` || die 1 "build_config: mktemp"
 	echo # generated config > $_tf
-	cat $HOME/config/macros >> $_tf
-	if [ -z "$_prog" -o ! -f $HOME/config/prog_$_prog ]; then
+	cat $CAHOME/config/macros >> $_tf
+	if [ -z "$_prog" -o ! -f $CAHOME/config/prog_$_prog ]; then
 		echo "missing program or config not found"
 		rm -f $_tf
 		return 1
@@ -313,7 +315,7 @@ function build_config {
 		echo "default_ca=this_ca" >> $_tf
 		echo "[ this_ca ]" >> $_tf
 	fi
-	cat $HOME/config/prog_$_prog >> $_tf
+	cat $CAHOME/config/prog_$_prog >> $_tf
 	[ ! -z "$_dn" ] && echo "distinguished_name=req_dn" >> $_tf
 	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
 	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
@@ -335,9 +337,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_attrs ]; then
-		if [ -f $HOME/config/$_attrs ]; then
+		if [ -f $CAHOME/config/$_attrs ]; then
 			echo "[ $_attrs ]" >> $_tf
-			cat $HOME/config/$_attrs >> $_tf
+			cat $CAHOME/config/$_attrs >> $_tf
 		else
 			echo "missing attrs config"
 			rm -f $_tf
@@ -346,9 +348,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_policy ]; then
-		if [ -f $HOME/config/$_policy ]; then
+		if [ -f $CAHOME/config/$_policy ]; then
 			echo "[ $_policy ]" >> $_tf
-			cat $HOME/config/$_policy >> $_tf
+			cat $CAHOME/config/$_policy >> $_tf
 		else
 			echo "missing policy config"
 			rm -f $_tf
@@ -357,9 +359,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_exten ]; then
-		if [ -f $HOME/config/$_exten ]; then
+		if [ -f $CAHOME/config/$_exten ]; then
 			echo "[ $_exten ]" >> $_tf
-			cat $HOME/config/$_exten >> $_tf
+			cat $CAHOME/config/$_exten >> $_tf
 			# SAN MUST ALWAY BE DIRECTLY AFTER extensions
 			if [ ! -z "$_san" ]; then
 				# must always be in teh cert_ext section
@@ -694,7 +696,7 @@ function create_crl {
 		echo $_tf
 		return 1
 	fi
-	out=`$OS ca -config $_tf -gencrl -out $CRLDIR/$ROOTCRL -days $CRLDAYS -keyfile $KEYDIR/$ROOTKEY -passin file:$KEYDIR/${ROOTKEY%%.key}.pass`
+	out=`$OS ca -config $_tf -gencrl -out $CRLDIR/$ROOTCRL -days $CRLDAYS -keyfile $KEYDIR/$ROOTKEY -passin file:$KEYDIR/${ROOTKEY%%.key}.pass 2>&1`
 	if [ $? -ne 0 ]; then
 		cat $_tf >&2
 		rm -f $_tf
@@ -736,7 +738,7 @@ function get_config {
 		echo "no key specified"
 		return 1
 	fi
-	_kv=`cat $HOME/config/$_n | grep -i $_k`
+	_kv=`cat $CAHOME/config/$_n | grep -i $_k`
 	if [ $_v -eq 0 ]; then
 		echo $_kv
 	else
@@ -784,7 +786,7 @@ function set_config {
 		return 1
 	fi
 	# make sure we are not adding the same key
-	grep -E -c "$_k[[:space:]]*=" $HOME/config/$_n >/dev/null
+	grep -E -c "$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null
 	_rc=$?
 	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
 		_adm=0
@@ -799,18 +801,18 @@ function set_config {
 	fi
 	_tf=`mktemp` || die 1 "set_config: mktemp"
 	if [ $_adm -eq 0 ]; then
-		cat $HOME/config/$_n | sed -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
+		cat $CAHOME/config/$_n | sed -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
 		echo "$_k=$_v" >&2
 	else
 		if [ $_adm -eq 2 ]; then
-			cat $HOME/config/$_n > $_tf
+			cat $CAHOME/config/$_n > $_tf
 			echo "$_k=$_v" >> $_tf
 			echo "$_k=$_v" >&2
 		else
-			cat $HOME/config/$_n | sed -r "/^$_k[[:space:]]*=/d" > $_tf
+			cat $CAHOME/config/$_n | sed -r "/^$_k[[:space:]]*=/d" > $_tf
 		fi
 	fi
-	mv -f $_tf $HOME/config/$_n
+	mv -f $_tf $CAHOME/config/$_n
 	return 0
 }
 
@@ -1103,7 +1105,7 @@ function import_config {
 		echo "must specify file"
 		return 1
 	fi
-	cp -f $_f $HOME/config/$_n
+	cp -f $_f $CAHOME/config/$_n
 	return 0
 }
 
@@ -1375,22 +1377,23 @@ function import_pkcs12 {
 }
 
 function check_root {
+set -x
 	local _ca=$1; shift
 	local _n=$1
 	local _sub
 	local _iss
 	[ -z "$_ca" ] && return 1
 	[ -z "$_n" ] && return 2
-	out=`show_cert $_ca -name $_n -subject -issuer`
+	_sub=`show_cert $_ca -name $_n -subject`
+	_iss=`show_cert $_ca -name $_n -issuer`
 	if [ $? -ne 0 ]; then
 		# error getting cert
 		echo $out
 		return 2
 	fi
-	out=`echo $out | sed -n -r 's/.*subject=[[:space:]]?([^ ]+)[[:space:]]+issuer=[[:space:]]?([^$]+)/\1:\2/p'`
-	_sub=`echo $out | cut -f1 -d:`
-	_iss=`echo $out | cut -f2 -d:`
-	if [ "$_sub" == "$_iss" ]; then
+	_sub=`echo $_sub | cut -f2- -d=`
+	_iss=`echo $_iss | cut -f2- -d=`
+	if [ "$_sub" = "$_iss" ]; then
 		# we have root
 		return 0
 	fi
@@ -1401,8 +1404,8 @@ function check_root {
 
 
 function generate_chain {
-	cat $CERTDIR/$ROOTCERT > $CERTDIR/${ROOTCERT%%.crt}-chain.pem
-	return 0
+#	cat $CERTDIR/$ROOTCERT > $CERTDIR/${ROOTCERT%%.crt}-chain.pem
+#	return 0
 # XXX FIXME
 set -x
 	local _ca=$1
@@ -1489,22 +1492,22 @@ while [ $# -ne 0 ]; do
 					[ -z "$2" ] && die 1 "nothing to do"
 					case "$2" in
 						mac*)
-							cat $HOME/config/macros
+							cat $CAHOME/config/macros
 							;;
 						pol*)
-							for i in `ls $HOME/config/policy_*`; do
+							for i in `ls $CAHOME/config/policy_*`; do
 								echo "___ ${i##*/} ___"
 								cat $i
 							done
 							;;
 						ext*)
-							for i in `ls $HOME/config/extension_*`; do
+							for i in `ls $CAHOME/config/extension_*`; do
 								echo "___ ${i##*/} ___"
 								cat $i
 							done
 							;;
 						prog*)
-							for i in `ls $HOME/config/prog_*`; do
+							for i in `ls $CAHOME/config/prog_*`; do
 								echo "___ ${i##*/} ___"
 								cat $i
 							done
