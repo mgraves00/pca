@@ -1447,6 +1447,8 @@ fi
 
 CA=$1; shift;
 
+trap die QUIT TERM
+
 if [ "$1" == "init" ]; then
 	out=`init_ca $CA`
 	if [ $? -ne 0 ]; then
