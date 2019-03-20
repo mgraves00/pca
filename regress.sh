@@ -101,6 +101,9 @@ echo "letmein" > $_tf
 runit 0 pca $TN export pkcs12 -name sunny -pass file:$_tf -file $_of -overwrite
 runit 0 'echo "letemin" | pca '$TN export pkcs12 -name sunny -pass -  -overwrite
 
+# test chain
+runit 0 pca $TN create chain
+
 # test CRL
 runit 0 pca $TN create crl
 runit 0 pca $TN show crl
