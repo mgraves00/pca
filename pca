@@ -338,11 +338,7 @@ function build_config {
 	[ ! -z "$_dn" ] && echo "distinguished_name=req_dn" >> $_tf
 	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
 	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
-#	if [ $_prog == "req" ]; then
-#		[ ! -z "$_exten" ] && echo "req_extensions=$_exten" >> $_tf
-#	else
 		[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
-#	fi
 	echo "" >> $_tf
 	if [ ! -z "$_dn" ]; then
 		if [ -f $_dn ]; then
