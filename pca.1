@@ -1,0 +1,294 @@
+.Dd $Mdocdate$
+.Dt PCA 1
+.Os
+.Sh NAME
+.Nm pca
+.Nd personal certificate authority
+.Sh SYNOPSIS
+.Nm
+.Aq name
+.Oc init
+.Nm
+.Aq name
+.Oc config list Aq mac|pol|ext|prog
+.Nm
+.Aq name
+.Oc config get macro Aq Fl key Cm key
+.Aq Fl value
+.Nm
+.Aq name
+.Oc config set macro Op Fl a | d
+.Aq Fl key Cm key
+.Aq Fl value Cm val
+.Nm
+.Aq name
+.Oc config get Aq pol|ext|prog
+.Aq Fl key Cm key
+.Aq Fl value
+.Nm
+.Aq name
+.Oc config set Aq pol|ext|prog
+.Op Fl a | d
+.Aq Fl key Cm key
+.Aq Fl value Cm val
+.Nm
+.Aq name
+.Oc create crl
+.Nm
+.Aq name
+.Oc create chain
+.Nm
+.Aq name
+.Oc create key
+.Aq Fl name Cm name
+.Op Fl bits Cm #
+.Nm
+.Aq name
+.Oc create root
+.Op Fl days Cm #
+.Op Fl bits Cm #
+.Op Fl cn Cm common name
+.Op Fl ct Cm country
+.Op Fl sp Cm state/province
+.Op Fl co Cm city
+.Op Fl or Cm organization
+.Op Fl ou Cm organizational unit
+.Op Fl em Cm email
+.Op Fl san Cm subaltname ...
+.Nm
+.Aq name
+.Oc create req
+.Aq Fl name Cm name
+.Aq Fl key Cm keyname | Fl newkey Cm Op #bits
+.Op Fl days Cm #
+.Op Fl cn Cm common name
+.Op Fl ct Cm country
+.Op Fl sp Cm state/province
+.Op Fl co Cm city
+.Op Fl or Cm organization
+.Op Fl ou Cm organizational unit
+.Op Fl em Cm email
+.Op Fl san Cm subaltname ...
+.Nm
+.Aq name
+.Oc show crl
+.Op Fl issuer
+.Op Fl hash
+.Op Fl fingerprint
+.Op Fl num
+.Op Fl last
+.Op Fl next
+.Nm
+.Aq name
+.Oc show req
+.Op Fl name Cm name
+.Nm
+.Aq name
+.Oc show root
+.Op Fl subject
+.Op Fl serial
+.Op Fl expire
+.Nm
+.Aq name
+.Oc show cert
+.Op Fl name Cm name
+.Op Fl subject
+.Op Fl serial
+.Op Fl expire
+.Nm
+.Aq name
+.Oc sign
+.Aq Fl name Cm name
+.Op Fl sign
+.Op Fl days Cm #
+.Op Fl san Cm subaltname ...
+.Nm
+.Aq name
+.Oc revoke
+.Aq Fl name Cm name | Fl serial Cm #
+.Op Fl crl
+.Nm
+.Aq name
+.Oc delete
+.Aq req|key|cert
+.Aq Fl name Cm name
+.Nm
+.Aq name
+.Oc export pkcs12
+.Aq Fl name Cm name
+.Aq Fl file Cm pkcsfile
+.Aq Fl pass Cm -|file:filename|password
+.Op Fl overwrite
+.Op Fl chain
+.Nm
+.Aq name
+.Oc import pkcs12
+.Aq Fl name Cm name
+.Aq Fl file Cm pkcsfile
+.Aq Fl pass Cm -|file:filename|password
+.Op Fl overwrite
+.Sh DESCRIPTION
+The
+.Nm
+utility creates and maintains a public key infrastructure certificate authority.
+Certificate can be created, revoked, imported and exported.
+The utility makes use of
+.Xr openssl 1
+command line tool as well as other command line utilities.
+
+The utility makes every effort not to expose keys or passwords to other users on the system.
+However it does rely on directory permissions to maintain security.
+As it's name implies it is for personal use.
+
+.Sh COMMANDS
+.Ss init
+Initializes the CA directory structure and creates configuration files.  The configuration files should be reviewed and adjusted according to the CA's specific requirements.
+.Ss config
+This command allows for manipulation of the configuration files
+.Ss config list
+List all configuration files of a specific type
+.Ss config get Aq macro|pol|ext|prog
+Retrieves the specific key from a specific type of file.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify the name of the policy, extension, or program to used.  If macro is specified the name argument is not required
+.It Fl key Cm key
+The specific key to search for.
+Note the key is case sensitative.
+.It Fl value
+An optional flag when specified will cause just the value to be displayed.
+Default is to display KEY=vavlue
+.El
+.Ss config set Aq macro|pol|ext|prog
+Sets the specific key and value in the specific type of file.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify the name of the policy, extension, or program to used.  If macro is specified the name argument is not required
+.It Fl a
+Specify to add a new key to a file.
+.It Fl d
+Sepecify to delete an existing key from a file.
+When
+.Fl d
+is used the
+.Fl value
+flag is not required.
+.It Fl key Cm key
+The specific key to search for.
+Note the key is case sensitative.
+.It Fl value Cm value
+Sepecify the value to add to the key.
+Default is to display KEY=vavlue
+
+	set	sets a specific KEY equal to the specified value.  For MACROS only the key needs to be specified.  For all other file types the -name of the file needs to be specified.  There are optional arguments -a for adding a new key=value tuple and -d for deleting a specific key=value tuple.  When deleting a specific key=value tuple the -value option is not required and will be silently ignored.
+
+.Ss create
+This command allows for the creation of specific PKI files necessary for operating the PKI.
+.Ss create crl
+Create a certificate revocation list from the database.
+.Ss create chain
+Create a certificate chain.
+.Ss create key
+Create a key.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify a name to assign to the key.
+.It Fl bits Cm #
+Optionally specify the number of bits the key will use.  Must be a factor of 2^x
+.El
+.Ss create req
+Create a certificate signing request.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify a name to assign to the request
+.It Fl key Cm keyname | Fl newkey Op Cm #bits
+Specify an existing key to use or create a new key with the optional numbe of bits specified.
+.It Fl days Cm #
+Specify the number of day the certificate should be valid for.  Call be overridden when the request is signed.
+.It Fl cn Cm common name
+Common name for the subject.  Usually the FQDN of the host
+.It Fl ct Cm country
+Country of the subject.
+.It Fl sp Cm state/province
+State or Province of the subject.
+.It Fl co Cm city
+City of the subject.
+.It Fl or Cm organization
+Organizational name of the subject.
+.It Fl ou Cm organizational unit
+Organizational unit name of the subject.
+.It Fl em Cm email
+Email of the subject
+.It Fl san Cm subaltname ...
+Subject alternative name of the subject.  Can be specified more than once.  All values entered must be prefixed with their respecitive type: DNS= for dns name; IP= for IP address; EM= for email.
+.El
+.Ss create root
+Create the root certificate.  This will only need to be done once after macros have been adjusted.
+.Bl -tag -width Ds
+.It Fl bits Cm #
+Set the number of bits the root key is to use.
+.It Fl days Cm #
+Specify the number of day the certificate should be valid for.  Call be overridden when the request is signed.
+.It Fl cn Cm common name
+Common name for the subject.  Usually the FQDN of the host
+.It Fl ct Cm country
+Country of the subject.
+.It Fl sp Cm state/province
+State or Province of the subject.
+.It Fl co Cm city
+City of the subject.
+.It Fl or Cm organization
+Organizational name of the subject.
+.It Fl ou Cm organizational unit
+Organizational unit name of the subject.
+.It Fl em Cm email
+Email of the subject
+.It Fl san Cm subaltname ...
+Subject alternative name of the subject.  Can be specified more than once.  All values entered must be prefixed with their respecitive type: DNS= for dns name; IP= for IP address; EM= for email.
+.Ss show
+Display various parts of the CA
+.Ss show crl
+Show the current Certificate Revocation list.
+.Bl -tags -width Ds
+.It Fl issuer
+The CRL issuer.
+.It Fl hash
+The CRL hash.
+.It Fl fingerprint
+The CRL fingerprint.
+.It Fl num
+The CRL number.
+.It Fl last
+The date of the last update.
+.It Fl next
+The date of the next update.
+.El
+.Ss show req
+Show the specified request or if no name given all requests
+.Ss show root
+Show root certificate
+.Ss show cert
+Show the specified certificate or if no name is given all certificates
+.Ss sign
+Sign the specified CSR
+.Ss revoke
+Revoke a certificate.
+NOTE: This does not remove the certificate, CSR, or key from the CA.
+.Ss delete	req|cert|key
+Delete a certificate, key or request from the CA
+.Ss import pkcs12
+Import a certificate from the specified PKCS12 file
+.Ss export pkcs12
+Export a certificate into the specified PKCS12 file
+.Sh FILES
+.Bl -tag -width Ds
+.It Pa ~/.pca
+directory where the CA files etc are stored
+.El
+.Sh EXAMPLES
+
+.Sh SEE ALSO
+.Xr openssl 1
+.Sh Authors
+Michael Graves
+.Aq mg@brainfat.net
