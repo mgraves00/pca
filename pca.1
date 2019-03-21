@@ -249,7 +249,7 @@ Subject alternative name of the subject.  Can be specified more than once.  All 
 Display various parts of the CA
 .Ss show crl
 Show the current Certificate Revocation list.
-.Bl -tags -width Ds
+.Bl -tag -width Ds
 .It Fl issuer
 The CRL issuer.
 .It Fl hash
@@ -265,28 +265,104 @@ The date of the next update.
 .El
 .Ss show req
 Show the specified request or if no name given all requests
+.Bl -tag -width Ds
+.It Fl name Cm name
+If specified the request by that name will be displayed.
+By default all unsigned requests are listed with their subject.
+.El
 .Ss show root
 Show root certificate
+.Bl -tag -width Ds
+.It Fl serial
+.It Fl expire
+.It Fl subject
+.It Fl subjecthash
+.It Fl issuer
+.It Fl issuerhash
+.It Fl fingerprint
+.El
 .Ss show cert
 Show the specified certificate or if no name is given all certificates
+.Bl -tag -width Ds
+.It Fl name Cm name
+.It Fl serial
+.It Fl expire
+.It Fl subject
+.It Fl subjecthash
+.It Fl issuer
+.It Fl issuerhash
+.It Fl fingerprint
+.El
 .Ss sign
 Sign the specified CSR
+.Bl -tag -width Ds
+.It Fl name Cm name
+.It Fl sign
+.It Fl days Cm #
+.It Fl san Cm subaltname
+.El
 .Ss revoke
 Revoke a certificate.
 NOTE: This does not remove the certificate, CSR, or key from the CA.
+.Bl -tag -width Ds
+.It Fl name Cm name | Fl serial Cm #
+.It Fl crl
+.El
 .Ss delete	req|cert|key
 Delete a certificate, key or request from the CA
+.Bl -tag -width Ds
+.It Fl name Cm name | Fl serial Cm #
+.El
 .Ss import pkcs12
 Import a certificate from the specified PKCS12 file
+.Bl -tag -width Ds
+.It Fl name Cm name
+.It Fl file Cm name
+.It Fl pass Cm value
+.It Fl overwrite
+.El
 .Ss export pkcs12
 Export a certificate into the specified PKCS12 file
+.Bl -tag -width Ds
+.It Fl name Cm name
+.It Fl file Cm name
+.It Fl pass Cm value
+.It Fl overwrite
+.It Fl chain
+.El
 .Sh FILES
 .Bl -tag -width Ds
 .It Pa ~/.pca
 directory where the CA files etc are stored
 .El
 .Sh EXAMPLES
-
+To create a new CA called
+.Sq testCA
+do:
+.Dl $ pca testCA init
+.Pp
+To create a new root certificate:
+.Dl $ pca testCA create root
+.Pp
+To create a new CSR called
+.Sq sunny
+do:
+.Dl $ pca testCA create req -name sunny -cn sunny.example.com -newkey
+.Pp
+To sign the CSR named
+.Sq sunny
+do:
+.Dl $ pca testCA sign -name sunny
+.Pp
+To create the certificate chain do:
+.Dl $ pca testCA create chain
+.Pp
+To export the certificate and key named
+.Sq sunny
+and include the certificate chain do:
+.Dl $ pca testCA export pkcs12 -name sunny -file sunny.p12 -pass secret -chain -overwrite
+The file sunny.p12 can not be copied to another system and imported for use.
+.Pp
 .Sh SEE ALSO
 .Xr openssl 1
 .Sh Authors
