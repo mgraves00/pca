@@ -133,7 +133,7 @@ testit "" pca $TN show req
 runit 0 pca $TN create req -name cloudy -newkey 512 -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
 testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" pca $TN show req -name cloudy
 runit 0 pca $TN sign -name cloudy -sign
-testit "CA:TRUE,pathlen:1" pca $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
+#testit "CA:TRUE,pathlen:1" pca $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
 
 
 die 0 "Complete Success"

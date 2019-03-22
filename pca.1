@@ -48,9 +48,9 @@
 .Op Fl days Cm #
 .Op Fl bits Cm #
 .Op Fl cn Cm common name
-.Op Fl ct Cm country
+.Op Fl co Cm country
 .Op Fl sp Cm state/province
-.Op Fl co Cm city
+.Op Fl ct Cm city
 .Op Fl or Cm organization
 .Op Fl ou Cm organizational unit
 .Op Fl em Cm email
@@ -62,9 +62,9 @@
 .Aq Fl key Cm keyname | Fl newkey Cm Op #bits
 .Op Fl days Cm #
 .Op Fl cn Cm common name
-.Op Fl ct Cm country
+.Op Fl co Cm country
 .Op Fl sp Cm state/province
-.Op Fl co Cm city
+.Op Fl ct Cm city
 .Op Fl or Cm organization
 .Op Fl ou Cm organizational unit
 .Op Fl em Cm email
@@ -88,6 +88,11 @@
 .Op Fl subject
 .Op Fl serial
 .Op Fl expire
+.Op Fl subject
+.Op Fl subjecthash
+.Op Fl issuer
+.Op Fl issuerhash
+.Op Fl fingerprint
 .Nm
 .Aq name
 .Oc show cert
@@ -95,6 +100,11 @@
 .Op Fl subject
 .Op Fl serial
 .Op Fl expire
+.Op Fl subject
+.Op Fl subjecthash
+.Op Fl issuer
+.Op Fl issuerhash
+.Op Fl fingerprint
 .Nm
 .Aq name
 .Oc sign
@@ -274,61 +284,98 @@ By default all unsigned requests are listed with their subject.
 Show root certificate
 .Bl -tag -width Ds
 .It Fl serial
+Display the root certificate serial number
 .It Fl expire
+Display the root certificate expire date
 .It Fl subject
+Display the root certificate subject
 .It Fl subjecthash
+Display the root certificate subject hash
 .It Fl issuer
+Display the root certificate issuer
 .It Fl issuerhash
+Display the root certificate issuer hash
 .It Fl fingerprint
+Display the root certificate fingerprint
 .El
 .Ss show cert
 Show the specified certificate or if no name is given all certificates
 .Bl -tag -width Ds
 .It Fl name Cm name
+Only display the certificate with the name specified
 .It Fl serial
+Display the certificate serial number
 .It Fl expire
+Display the certificate expire date
 .It Fl subject
+Display the certificate subject
 .It Fl subjecthash
+Display the certificate subject hash
 .It Fl issuer
+Display the certificate issuer
 .It Fl issuerhash
+Display the certificate issuer hash
 .It Fl fingerprint
+Display the certificate fingerprint
 .El
 .Ss sign
 Sign the specified CSR
 .Bl -tag -width Ds
 .It Fl name Cm name
+Specify the name of the request to sign
 .It Fl sign
+Enable the certificate to be able to sign requests.  Useful when creating a dedicated issuer certificate. Use with caution
 .It Fl days Cm #
+Number of days the certificate is valid for.
 .It Fl san Cm subaltname
+Add one or more subject alternative names. See request for more detail.
 .El
 .Ss revoke
 Revoke a certificate.
 NOTE: This does not remove the certificate, CSR, or key from the CA.
 .Bl -tag -width Ds
 .It Fl name Cm name | Fl serial Cm #
+Specify the name or serial number of the certificate to revoke.
 .It Fl crl
+After the certificate is revoked, generate a new CRL.
 .El
 .Ss delete	req|cert|key
 Delete a certificate, key or request from the CA
 .Bl -tag -width Ds
-.It Fl name Cm name | Fl serial Cm #
+.It Fl name Cm name
+Specify the name of the request, certificate or key to delete.  The deletion is perminant.
 .El
 .Ss import pkcs12
 Import a certificate from the specified PKCS12 file
 .Bl -tag -width Ds
 .It Fl name Cm name
-.It Fl file Cm name
+Specify the name of the cert/key will get imported as.
+.It Fl file Cm file
+Specify the pkcs12 file the contains the cert/key
 .It Fl pass Cm value
+Specify the password to use to decrypt the file.
+If the password is stored in a file prefix the file name with 'file:'.
+The password can be read from stdin by setting the file name to '-'.
+The password can also be specified on the command line.
 .It Fl overwrite
+If the certificate/key already exists by the name specified this will overwrite it.
 .El
 .Ss export pkcs12
 Export a certificate into the specified PKCS12 file
 .Bl -tag -width Ds
 .It Fl name Cm name
-.It Fl file Cm name
+Specify the name of the cert/key will get exported.
+.It Fl file Cm file
+Specify the pkcs12 file write the certificate and key
 .It Fl pass Cm value
+Specify the password to use to encrypt the file.
+If the password is stored in a file prefix the file name with 'file:'.
+The password can be read from stdin by setting the file name to '-'.
+The password can also be specified on the command line.
 .It Fl overwrite
+If the export file already exists by the file name specified this will overwrite it.
 .It Fl chain
+Include the certificate chain in the export.
 .El
 .Sh FILES
 .Bl -tag -width Ds
