@@ -11,7 +11,7 @@ openssl the script tries to hide the rough edges and create a pleasent and unifo
 
 
 ## History
-This script started life as a Makefile.  Eventually the Makefile limmitations were irritating
+This script started life as a Makefile.  Eventually the Makefile limitations were irritating
 enough to drive a rewrite.
 
 
