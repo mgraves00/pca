@@ -196,7 +196,7 @@ CRLDAYS=365
 CERTDAYS=365
 DEFMD=sha256
 DEFBITS=2048
-PUBLICURL=xxx
+PUBLICURL=http://127.0.0.1/ca
 PATHLEN=1
 EOF
 
@@ -551,6 +551,7 @@ function create_root {
 }
 
 function create_req {
+	set -x
 	local _ca=$1; shift;
 	local _n
 	local _key
@@ -676,7 +677,7 @@ function create_req {
 	fi
 
 	if [ $_sign -eq 1 ]; then
-		_tf=`build_config $_ca "req" -policy policy_match -ext extension_ca -a req_attrs -dn $REQDIR/$_n.dn`
+		_tf=`build_config $_ca "req" -policy policy_sign -ext extension_ca -a req_attrs -dn $REQDIR/$_n.dn`
 	else
 		_tf=`build_config $_ca "req" -policy policy_match -ext extension_cert -a req_attrs -dn $REQDIR/$_n.dn`
 	fi
@@ -1233,8 +1234,7 @@ function export_pkcs12 {
 				_p=$2
 				shift; shift;;
 			-ch*)
-				die 1 "Not implemented"
-#				_ch=1
+				_ch=1
 				shift;;
 			*)
 				shift;;
