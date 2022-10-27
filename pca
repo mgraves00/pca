@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.0
+VER=1.1
 NAME=${0##*/}
 OS="openssl"
 
@@ -53,6 +53,7 @@ function syntax {
 	echo "  <ca> config set macro [-a|-d] <-key key> <-value val>"
 	echo "  <ca> config get pol|ext|prog <-name name> <-key key> <-value>"
 	echo "  <ca> config set pol|ext|prog [-a|-d] <-name name> <-key key> <-value val>"
+	echo "  <ca> config set sign <-name name>"
 	echo "  <ca> create root [-days #] [-bits #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
 	echo "  <ca> create crl"
 	echo "  <ca> create key <-name name> [-bits #]"
@@ -61,7 +62,7 @@ function syntax {
 	echo "  <ca> show crl [-issuer] [-hash] [-fingerprint] [-num] [-last] [-next]"
 	echo "  <ca> show req [-name name]"
 	echo "  <ca> show root [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
-	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
+	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint] [-client] [-ca]"
 	echo "  <ca> sign <-name name> [-sign] [-days] [-san val ...]"
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
@@ -551,7 +552,6 @@ function create_root {
 }
 
 function create_req {
-	set -x
 	local _ca=$1; shift;
 	local _n
 	local _key
@@ -900,39 +900,77 @@ function sign_req {
 	return 0
 }
 
+# 0 = all
+# 1 = ca
+# 2 = client
+function list_certs {
+	local _n="$1"; shift;
+	local _signing=${1:-0};
+	local _list
+	set -o noglob
+	for i in `find $CERTDIR/ -name $_n.crt -print`; do
+		_n=`$OS x509 -in $i -noout -text | egrep "CA:TRUE" | tr -d " "`
+		case $_signing in
+			0) _list="${_list} $i" ;;
+			1) [[ ! -z "$_n" ]] && _list="${_list} $i" ;;
+			2) [[ -z "$_n" ]] && _list="${_list} $i" ;;
+		esac
+	done
+	set +o noglob
+	echo $_list
+	return 0
+}
+
 function show_cert {
 	local _ca=$1; shift;
 	local _n
 	local _opts
+	local _full=0
+	local _noca=0
 	[ -z "$_ca" ] && return 1
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
 				_n=$2
+				_full=1
 				shift; shift;;
 			-sub*hash)
 				_opts="$_opts -subject_hash"
+				_full=1
 				shift;;
 			-iss*hash)
 				_opts="$_opts -issuer_hash"
+				_full=1
 				shift;;
 			-ser*)
 				_opts="$_opts -serial"
+				_full=1
 				shift;;
 			-sub*)
 				_opts="$_opts -subject"
+				_full=1
 				shift;;
 			-iss*)
 				_opts="$_opts -issuer"
+				_full=1
 				shift;;
 			-fin*)
 				_opts="$_opts -fingerprint"
+				_full=1
 				shift;;
 			-exp*)
 				_opts="$_opts -enddate"
+				_full=1
 				shift;;
 			-email)
 				_opts="$_opts -email"
+				_full=1
+				shift;;
+			-client)
+				_noca=2
+				shift;;
+			-ca)
+				_noca=1
 				shift;;
 			*)
 				shift;;
@@ -945,18 +983,20 @@ function show_cert {
 		_opts="-text"
 	fi
 	set -o noglob
-	for i in `find $CERTDIR/ -name $_n.crt -print`; do
+	for i in `list_certs $_n $_noca`; do
 		_pn=${i##*/}
-		# skip root cert if name not specified
-		[ "$_n" == "*" -a "$_pn" == "$SIGNCERT" ] && continue;
-		echo -n "${_pn%%.req}: "
-		if [ "$_opts" == "-text" ]; then
-			# we want to see pretty formating
-			$OS x509 -in $i -noout $_opts
+		if [ $_full -ne 1 ]; then
+			echo "${_pn%%.crt}"
 		else
-			# we want to see condinsed formating
-			out=`$OS x509 -in $i -noout $_opts`
-			echo $out
+			echo -n "${_pn%%.crt}: "
+			if [ "$_opts" == "-text" ]; then
+				# we want to see pretty formating
+				$OS x509 -in $i -noout $_opts
+			else
+				# we want to see condinsed formating
+				out=`$OS x509 -in $i -noout $_opts`
+				echo $out
+			fi
 		fi
 	done
 	set +o noglob
@@ -1387,7 +1427,6 @@ function import_pkcs12 {
 }
 
 function check_root {
-set -x
 	local _ca=$1; shift
 	local _n=$1
 	local _sub
@@ -1583,7 +1622,23 @@ while [ $# -ne 0 ]; do
 					esac
 					while [ $# -ne 0 ]; do shift; done
 					;;
+				sign)
+					shift
+					[ -z "$1" ] && die 1 "nothing to do"
+					case "$1" in
+						-name)
+							shift
+							out=`set_config $CA -name macros -key SIGNCERT -value $1.crt` || die 1 "$out"
+							out=`set_config $CA -name macros -key SIGNKEY -value $1.key` || die 1 "$out"
+							echo $out
+							while [ $# -ne 0 ]; do shift; done
+							;;
+						*)
+							die 1 "Unknown command $1"
+							;;
 
+					esac
+					;;
 				*)
 					die 1 "Unknown command $1"
 					shift;;
