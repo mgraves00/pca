@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.1
+VER=1.3
 NAME=${0##*/}
 OS="openssl"
 
@@ -1426,56 +1426,39 @@ function import_pkcs12 {
 	return 0
 }
 
-function check_root {
-	local _ca=$1; shift
-	local _n=$1
-	local _sub
-	local _iss
-	[ -z "$_ca" ] && return 1
-	[ -z "$_n" ] && return 2
-	_sub=`show_cert $_ca -name $_n -subject`
-	_iss=`show_cert $_ca -name $_n -issuer`
-	if [ $? -ne 0 ]; then
-		# error getting cert
-		echo $out
-		return 2
-	fi
-	_sub=`echo $_sub | cut -f2- -d=`
-	_iss=`echo $_iss | cut -f2- -d=`
-	if [ "$_sub" = "$_iss" ]; then
-		# we have root
-		return 0
-	fi
-	# not root
-	return 1
-}
-
-
+#function check_root {
+#	local _ca=$1; shift
+#	local _n=$1
+#	local _sub
+#	local _iss
+#	[ -z "$_ca" ] && return 1
+#	[ -z "$_n" ] && return 2
+#	_sub=`show_cert $_ca -name $_n -subject`
+#	_iss=`show_cert $_ca -name $_n -issuer`
+#	if [ $? -ne 0 ]; then
+#		# error getting cert
+#		echo $out
+#		return 2
+#	fi
+#	_sub=`echo $_sub | cut -f2- -d=`
+#	_iss=`echo $_iss | cut -f2- -d=`
+#	if [ "$_sub" = "$_iss" ]; then
+#		# we have root
+#		return 0
+#	fi
+#	# not root
+#	return 1
+#}
 
 function generate_chain {
-	if [ -f $CERTDIR/$ROOTCHAIN ]; then
-		rm -f $CERTDIR/$ROOTCHAIN
+	set -o noglob
+	local _calist=`list_certs "*" 1`
+	set +o noglob
+	if [ -z "$_calist" ]; then
+		die 1 "could not find any CA certs"
 	fi
-	for i in $CHAIN; do
-		cat $CERTDIR/$i >> $CERTDIR/$ROOTCHAIN
-	done
+	cat $_calist > $CERTDIR/$ROOTCHAIN
 	return 0
-# XXX FIXME
-set -x
-	local _ca=$1
-	[ -z "$_ca" ] && return 1
-	out=`check_root $_ca ${SIGNCERT%%.crt}`
-	case "$?" in
-		0)	# found root
-			;;
-		1)	# not found root
-			;;
-		*)	# internal error
-			echo $out
-			return 1
-			;;
-	esac
-	
 }
 
 ### MAIN
