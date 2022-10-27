@@ -59,6 +59,7 @@ function testit {
 	fi
 	echo "Success"
 	rm -f $_tf
+	set +x
 }
 
 # clean up from last failure
@@ -82,7 +83,7 @@ testit "" ${CMD} $TN config get macro -key TEST10
 # create a root cert
 runit 0 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA"
 runit 0 ${CMD} $TN show root
-testit "root-test2.crt: subject= /O=testCA" ${CMD} $TN show root -subject
+testit "root-test2: subject= /O=testCA" ${CMD} $TN show root -subject
 
 # create a request
 runit 0 ${CMD} $TN create req -name sunny -newkey ${CERTBITS} -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
@@ -95,6 +96,9 @@ runit 0 ${CMD} $TN show cert -name sunny -subjecthash
 runit 0 ${CMD} $TN show cert -name sunny -issuer
 runit 0 ${CMD} $TN show cert -name sunny -issuerhash
 
+# test chain
+runit 0 ${CMD} $TN create chain
+
 # export PKCS12
 _of=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
 runit 1 ${CMD} $TN export pkcs12 -name sunny -pass "letmein" -file $_of
@@ -103,9 +107,7 @@ _tf=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
 echo "letmein" > $_tf
 runit 0 ${CMD} $TN export pkcs12 -name sunny -pass file:$_tf -file $_of -overwrite
 runit 0 'echo "letemin" | ${CMD} '$TN export pkcs12 -name sunny -pass -  -overwrite
-
-# test chain
-runit 0 ${CMD} $TN create chain
+runit 0 ${CMD} $TN export pkcs12 -name sunny -pass file:$_tf -file $_of -overwrite -chain
 
 # test CRL
 runit 0 ${CMD} $TN create crl
@@ -128,7 +130,7 @@ runit 1 ${CMD} $TN delete req
 runit 0 ${CMD} $TN delete req -name sunny
 runit 0 ${CMD} $TN delete key -name sunny
 runit 0 ${CMD} $TN delete cert -name sunny
-testit "" ${CMD} $TN show cert -subject
+testit "" ${CMD} $TN show cert -client -subject
 testit "" ${CMD} $TN show req
 
 
@@ -138,5 +140,11 @@ testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy
 runit 0 ${CMD} $TN sign -name cloudy -sign
 #testit "CA:TRUE,pathlen:1" ${CMD} $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
 
+runit 0 ${CMD} $TN config sign -name cloudy
+runit 0 ${CMD} $TN create req -name sunny -newkey ${CERTBITS} -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
+runit 0 ${CMD} $TN sign -name sunny
+testit "sunny: issuer= /C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" ${CMD} $TN show cert -name sunny -issuer
+runit 0 'echo "letemin" | ${CMD} '$TN export pkcs12 -name sunny -pass - -chain -overwrite
 
 die 0 "Complete Success"
+
