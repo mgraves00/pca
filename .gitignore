@@ -3,3 +3,6 @@ TODO
 .gitignore
 .regress-tmp.*
 .*.ca
+*.p12
+*.pfx
+*.tgz
