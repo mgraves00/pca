@@ -1,6 +1,8 @@
 #!/bin/sh
 TN=test2
 CMD=./pca
+CABITS=2048
+CERTBITS=2048
 
 TMPNAM=regress-tmp
 function die {
@@ -78,12 +80,12 @@ testit "" ${CMD} $TN config set macro -d -key TEST10
 testit "" ${CMD} $TN config get macro -key TEST10
 
 # create a root cert
-runit 0 ${CMD} $TN create root -days 10 -bits 1024 -or "testCA"
+runit 0 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA"
 runit 0 ${CMD} $TN show root
 testit "root-test2.crt: subject= /O=testCA" ${CMD} $TN show root -subject
 
 # create a request
-runit 0 ${CMD} $TN create req -name sunny -newkey 512 -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
+runit 0 ${CMD} $TN create req -name sunny -newkey ${CERTBITS} -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
 testit "sunny: subject=/O=testCA/CN=sunny.example.com" ${CMD} $TN show req -name sunny
 runit 0 ${CMD} $TN sign -name sunny
 runit 0 ${CMD} $TN show cert -name sunny
@@ -131,7 +133,7 @@ testit "" ${CMD} $TN show req
 
 
 # work on req options
-runit 0 ${CMD} $TN create req -name cloudy -newkey 512 -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
+runit 0 ${CMD} $TN create req -name cloudy -newkey ${CERTBITS} -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
 testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" ${CMD} $TN show req -name cloudy
 runit 0 ${CMD} $TN sign -name cloudy -sign
 #testit "CA:TRUE,pathlen:1" ${CMD} $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
