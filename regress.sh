@@ -1,5 +1,6 @@
 #!/bin/sh
 TN=test2
+CMD=./pca
 
 TMPNAM=regress-tmp
 function die {
@@ -61,79 +62,79 @@ function testit {
 # clean up from last failure
 #rm -rf .$TN.ca
 
-runit 0 pca $TN init
-runit 1 pca $TN init
+runit 0 ${CMD} $TN init
+runit 1 ${CMD} $TN init
 
-runit 0 pca $TN config list macros
-runit 0 pca $TN config list policy
-runit 0 pca $TN config list extension
+runit 0 ${CMD} $TN config list macros
+runit 0 ${CMD} $TN config list policy
+runit 0 ${CMD} $TN config list extension
 
 # macro / policy / extension all use the same function
-testit "CAHOME=$HOME/.pca/$TN" pca $TN config get macro -key CAHOME
-testit "$HOME/.pca/$TN" pca $TN config get macro -key CAHOME -value
-testit "TEST10=10" pca $TN config set macro -a -key TEST10 -value 10
-testit "TEST10=11" pca $TN config set macro -key TEST10 -value 11
-testit "" pca $TN config set macro -d -key TEST10
-testit "" pca $TN config get macro -key TEST10
+testit "CAHOME=$HOME/.pca/$TN" ${CMD} $TN config get macro -key CAHOME
+testit "$HOME/.pca/$TN" ${CMD} $TN config get macro -key CAHOME -value
+testit "TEST10=10" ${CMD} $TN config set macro -a -key TEST10 -value 10
+testit "TEST10=11" ${CMD} $TN config set macro -key TEST10 -value 11
+testit "" ${CMD} $TN config set macro -d -key TEST10
+testit "" ${CMD} $TN config get macro -key TEST10
 
 # create a root cert
-runit 0 pca $TN create root -days 10 -bits 1024 -or "testCA"
-runit 0 pca $TN show root
-testit "root-test2.crt: subject= /O=testCA" pca $TN show root -subject
+runit 0 ${CMD} $TN create root -days 10 -bits 1024 -or "testCA"
+runit 0 ${CMD} $TN show root
+testit "root-test2.crt: subject= /O=testCA" ${CMD} $TN show root -subject
 
 # create a request
-runit 0 pca $TN create req -name sunny -newkey 512 -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
-testit "sunny: subject=/O=testCA/CN=sunny.example.com" pca $TN show req -name sunny
-runit 0 pca $TN sign -name sunny
-runit 0 pca $TN show cert -name sunny
-runit 0 pca $TN show cert -name sunny -subject
-runit 0 pca $TN show cert -name sunny -expire
-runit 0 pca $TN show cert -name sunny -subjecthash
-runit 0 pca $TN show cert -name sunny -issuer
-runit 0 pca $TN show cert -name sunny -issuerhash
+runit 0 ${CMD} $TN create req -name sunny -newkey 512 -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
+testit "sunny: subject=/O=testCA/CN=sunny.example.com" ${CMD} $TN show req -name sunny
+runit 0 ${CMD} $TN sign -name sunny
+runit 0 ${CMD} $TN show cert -name sunny
+runit 0 ${CMD} $TN show cert -name sunny -subject
+runit 0 ${CMD} $TN show cert -name sunny -expire
+runit 0 ${CMD} $TN show cert -name sunny -subjecthash
+runit 0 ${CMD} $TN show cert -name sunny -issuer
+runit 0 ${CMD} $TN show cert -name sunny -issuerhash
 
 # export PKCS12
 _of=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
-runit 1 pca $TN export pkcs12 -name sunny -pass "letmein" -file $_of
-runit 0 pca $TN export pkcs12 -name sunny -pass "letmein" -file $_of -overwrite
+runit 1 ${CMD} $TN export pkcs12 -name sunny -pass "letmein" -file $_of
+runit 0 ${CMD} $TN export pkcs12 -name sunny -pass "letmein" -file $_of -overwrite
 _tf=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
 echo "letmein" > $_tf
-runit 0 pca $TN export pkcs12 -name sunny -pass file:$_tf -file $_of -overwrite
-runit 0 'echo "letemin" | pca '$TN export pkcs12 -name sunny -pass -  -overwrite
+runit 0 ${CMD} $TN export pkcs12 -name sunny -pass file:$_tf -file $_of -overwrite
+runit 0 'echo "letemin" | ${CMD} '$TN export pkcs12 -name sunny -pass -  -overwrite
 
 # test chain
-runit 0 pca $TN create chain
+runit 0 ${CMD} $TN create chain
 
 # test CRL
-runit 0 pca $TN create crl
-runit 0 pca $TN show crl
-runit 0 pca $TN show crl -issuer
-runit 0 pca $TN show crl -hash
-runit 0 pca $TN show crl -fingerprint
-runit 0 pca $TN show crl -num
-runit 0 pca $TN show crl -last
-runit 0 pca $TN show crl -next
+runit 0 ${CMD} $TN create crl
+runit 0 ${CMD} $TN show crl
+runit 0 ${CMD} $TN show crl -issuer
+runit 0 ${CMD} $TN show crl -hash
+runit 0 ${CMD} $TN show crl -fingerprint
+runit 0 ${CMD} $TN show crl -num
+runit 0 ${CMD} $TN show crl -last
+runit 0 ${CMD} $TN show crl -next
 
 # revoke cert
-runit 0 pca $TN revoke -name sunny
+runit 0 ${CMD} $TN revoke -name sunny
 # refresh crl
-runit 0 pca $TN create crl
-runit 0 pca $TN show crl
+runit 0 ${CMD} $TN create crl
+runit 0 ${CMD} $TN show crl
 
 # cleanup sunny
-runit 1 pca $TN delete req
-runit 0 pca $TN delete req -name sunny
-runit 0 pca $TN delete key -name sunny
-runit 0 pca $TN delete cert -name sunny
-testit "" pca $TN show cert -subject
-testit "" pca $TN show req
+runit 1 ${CMD} $TN delete req
+runit 0 ${CMD} $TN delete req -name sunny
+runit 0 ${CMD} $TN delete key -name sunny
+runit 0 ${CMD} $TN delete cert -name sunny
+testit "" ${CMD} $TN show cert -subject
+testit "" ${CMD} $TN show req
 
 
 # work on req options
-runit 0 pca $TN create req -name cloudy -newkey 512 -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
-testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" pca $TN show req -name cloudy
-runit 0 pca $TN sign -name cloudy -sign
-#testit "CA:TRUE,pathlen:1" pca $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
+runit 0 ${CMD} $TN create req -name cloudy -newkey 512 -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
+testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" ${CMD} $TN show req -name cloudy
+runit 0 ${CMD} $TN sign -name cloudy -sign
+#testit "CA:TRUE,pathlen:1" ${CMD} $TN 'show cert -name cloudy | egrep "CA:[TF][RA]" | tr -d " "'
 
 
 die 0 "Complete Success"
