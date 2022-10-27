@@ -132,6 +132,11 @@
 .Op Fl chain
 .Nm
 .Aq name
+.Oc export html
+.Aq Fl file Cm tgzfile
+.Op Fl overwrite
+.Nm
+.Aq name
 .Oc import pkcs12
 .Aq Fl name Cm name
 .Aq Fl file Cm pkcsfile
@@ -376,6 +381,15 @@ The password can also be specified on the command line.
 If the export file already exists by the file name specified this will overwrite it.
 .It Fl chain
 Include the certificate chain in the export.
+.El
+.Ss export html
+Export a CA dirctory structure with the CA certs and the current CRL.
+.Bl -tag -width Ds
+.It Fl file Cm file
+Specify the tgz file to contain the certs in a /ca directory. This file can be
+moved to a webserver for reference by external systems.
+.It Fl overwrite
+If the export file already exists by the file name specified this will overwrite it.
 .El
 .Sh FILES
 .Bl -tag -width Ds

@@ -17,18 +17,29 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.3
+VER=1.4
 NAME=${0##*/}
 OS="openssl"
 
 function die {
 	local _rc=${1:?1}; shift;
 	local _out=$*
-	rm -f /tmp/$NAME-temp.*
+	rm -rf /tmp/$NAME-temp.*
 	if [ ! -z "$_out" ]; then
 		echo "$_out"
 	fi
 	exit $_rc 
+}
+
+function newtmpd {
+	local _failmsg=$*
+	local _tf
+	_tf=`mktemp -d -q /tmp/$NAME-temp.XXXXXXXX`
+	if [ $? -ne 0 ]; then
+		die 1 "$_failmsg"
+	fi
+	echo $_tf
+	return 0
 }
 
 function newtmp {
@@ -67,6 +78,7 @@ function syntax {
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
+	echo "  <ca> export html <-file name> [-overwrite]"
 	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-overwrite]"
 	echo ""
 	die $_rc
@@ -1426,6 +1438,47 @@ function import_pkcs12 {
 	return 0
 }
 
+function export_html {
+	local _ca=$1; shift;
+	local _n
+	local _f
+	local _tf
+	local _td
+	local _ow=0
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-file)
+				_f=$2
+				shift; shift;;
+			-overwrite)
+				_ow=1
+				shift;;
+			*)
+				shift;;
+		esac
+	done
+	if [ -z "$_f" ]; then
+		die 1 "no output file"
+	fi
+	_td=`newtmpd "export_html: newtmpd"`
+	mkdir $_td/ca || die 1 "export_html: failed to make directory"
+	set -o noglob
+	_cert_list=`list_certs "*" 1`
+	set +o noglob
+	for _tf in $_cert_list; do
+		cp $_tf $_td/ca
+	done
+	cp $CRLDIR/$ROOTCRL $_td/ca
+	_tf=`newtmp "export_html: newtmp"`
+	tar -zcf $_tf -C $_td .
+	if [ -f $_f -a $_ow -eq 0 ]; then
+		die 1 "cannot create export. File already exists"
+	fi
+	mv -f $_tf $_f
+	return 0
+}
+
 #function check_root {
 #	local _ca=$1; shift
 #	local _n=$1
@@ -1682,7 +1735,11 @@ while [ $# -ne 0 ]; do
 					shift;
 					out=`export_pkcs12 $CA $*` || die 1 "$out"
 					echo $out
-					while [ $# -ne 0 ]; do shift; done
+					;;
+				html)
+					shift;
+					out=`export_html $CA $*` || die 1 "$out"
+					echo $out
 					;;
 				*)
 					die 1 "Unknown command $1"
