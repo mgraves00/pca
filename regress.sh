@@ -146,5 +146,8 @@ runit 0 ${CMD} $TN sign -name sunny
 testit "sunny: issuer= /C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" ${CMD} $TN show cert -name sunny -issuer
 runit 0 'echo "letemin" | ${CMD} '$TN export pkcs12 -name sunny -pass - -chain -overwrite
 
+# resign an existing cert
+runit 0 ${CMD} $TN resign -name cloudy
+
 die 0 "Complete Success"
 

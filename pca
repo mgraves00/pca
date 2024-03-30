@@ -2,7 +2,7 @@
 
 # Personal Certificate Authority
 #
-# Copyright (c) 2022 Michael Graves <mg@brainfat.net>
+# Copyright (c) 2024 Michael Graves <mg@brainfat.net>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -75,6 +75,7 @@ function syntax {
 	echo "  <ca> show root [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
 	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint] [-client] [-ca]"
 	echo "  <ca> sign <-name name> [-sign] [-days] [-san val ...]"
+	echo "  <ca> resign <-name name> [-sign] [-days]"
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
@@ -161,6 +162,30 @@ function prep_serial {
 	echo $_sn > $DBDIR/serial.txt
 	return 0
 }
+
+# arg1 = name to find (including any dash
+# arg2 = 0 = return "found" if found; 1 = retrun value
+# arg3+ = rest of args
+function get_arg {
+	local _name=$1; shift;
+	local _ext=$1; shift;
+	local _args=$*;
+	while [ $# -ne 0 ]; do
+		if [ "$_name" == "$1" ]; then
+			if [ $_ext -eq 0 ]; then
+				echo "found"
+				return 0
+			else
+				echo "$2"
+				return 0
+			fi
+		fi
+		shift;
+	done
+	echo ""
+	return 0
+}
+
 
 # create the directory structure and some generic config files
 # with semi-sane defaults
@@ -854,11 +879,14 @@ function sign_req {
 	local _sign=0
 	while [ $# -ne 0 ]; do
 		case "$1" in
-			-name)
-				_n=$2
-				shift; shift;;
 			-days)
 				_days=$2
+				shift; shift;;
+			-file)
+				_file=$2
+				shift; shift;;
+			-name)
+				_n=$2
 				shift; shift;;
 			-sign)
 				_sign=1
@@ -869,11 +897,13 @@ function sign_req {
 				;;
 		esac
 	done
-	if [ ! -z "$_n" -a ! -z "$_file" ]; then
+	if [ -z "$_n" -a -z "$_file" ]; then
 		echo "must specify name or csr"
 		return 1
 	fi
-	if [ ! -z "$_n" ]; then
+	if [ ! -z "$_file" ]; then
+		_file=$REQDIR/$_file
+	else
 		_file=$REQDIR/$_n.req
 	fi
 	if [ ! -f $_file ]; then
@@ -905,7 +935,8 @@ function sign_req {
 		return 1
 	fi
 	# rename req if it is in our reqdir
-	if [ ! -z "$_n" ]; then
+	out=${_file##*.}
+	if [ ! -z "$_n" -a "$out" == "req" ]; then
 		mv -f $REQDIR/$_n.req $REQDIR/$_n.signed
 	fi
 	rm -f $_tf
@@ -1679,6 +1710,23 @@ while [ $# -ne 0 ]; do
 					die 1 "Unknown command $1"
 					shift;;
 			esac
+			while [ $# -ne 0 ]; do shift; done
+			;;
+		resign)
+			shift;
+			# verify we have a cert
+			name=`get_arg -name 1 $*`
+			days=`get_arg -days 1 $*`
+			[[ "$name" == "" ]] && die 1 "cannot find cert"
+			# revoke the old cert
+			out=`revoke_cert $CA -name $name` || die 1 "$out"
+			echo $out
+			while [ $# -ne 0 ]; do shift; done
+			# signe the old req
+			out="-name $name -file $name.signed"
+			[[ ! -z "$days" ]] && out="$out -days $days"
+			out=`sign_req $CA $out` || die 1 "$out"
+			echo $out
 			while [ $# -ne 0 ]; do shift; done
 			;;
 		sign)
