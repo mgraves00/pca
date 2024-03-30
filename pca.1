@@ -114,6 +114,12 @@
 .Op Fl san Cm subaltname ...
 .Nm
 .Aq name
+.Oc resign
+.Aq Fl name Cm name
+.Op Fl sign
+.Op Fl days Cm #
+.Nm
+.Aq name
 .Oc revoke
 .Aq Fl name Cm name | Fl serial Cm #
 .Op Fl crl
@@ -334,6 +340,16 @@ Enable the certificate to be able to sign requests.  Useful when creating a dedi
 Number of days the certificate is valid for.
 .It Fl san Cm subaltname
 Add one or more subject alternative names. See request for more detail.
+.El
+.Ss resign
+Resign the specified CSR. This will revoke an existing cert then attempt to resign an existing CSR.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify the name of the request to sign
+.It Fl sign
+Enable the certificate to be able to sign requests.  Useful when creating a dedicated issuer certificate. Use with caution
+.It Fl days Cm #
+Number of days the certificate is valid for.
 .El
 .Ss revoke
 Revoke a certificate.
