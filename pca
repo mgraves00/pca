@@ -95,6 +95,7 @@ function syntax {
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
 	echo "  <ca> export html <-file name> [-overwrite]"
 	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-overwrite]"
+	echo "  <ca> import request <-name name> <-file name> [-overwrite]"
 	echo ""
 	die $_rc
 }
@@ -1141,13 +1142,15 @@ function show_requests {
 		esac
 	done
 	if [ -z "$_n" ]; then
-		_n="*"
+		_n='*'
 	fi
+	set -o noglob
 	for i in `find $REQDIR/ -name $_n.req -print` ; do
 		_pn=${i##*/}
 		echo -n "${_pn%%.req}: "
 		$OS req -in $i -noout -subject
 	done
+	set +o noglob
 	return 0
 }
 
@@ -1386,6 +1389,41 @@ function export_pkcs12 {
 		return 1
 	fi
 	${RM} -f $_pf
+	return 0
+}
+
+function import_request {
+	local _ca=$1; shift;
+	local _n
+	local _f
+	local _ow=0
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-file)
+				_f=$2
+				shift; shift;;
+			-overwrite)
+				_ow=1
+				shift;;
+		esac
+	done
+	if [ -z "$_n" ]; then
+		echo "must specify name"
+		return 1
+	fi
+	if [ ! -f "$_f" ]; then
+		echo "must specify file"
+		return 1
+	fi
+	if [ -f "${REQDIR}/${_n}.req" -a ${_ow} -ne 1 ]; then
+		echo "request file already exists and overwrite not specified"
+		return 1
+	fi
+	${CP} ${_f} ${REQDIR}/${_n}.req
 	return 0
 }
 
@@ -1816,6 +1854,12 @@ while [ $# -ne 0 ]; do
 				pkcs12)
 					shift;
 					out=`import_pkcs12 $CA $*` || die 1 "$out"
+					echo $out
+					while [ $# -ne 0 ]; do shift; done
+					;;
+				req*)
+					shift;
+					out=`import_request $CA $*` || die 1 "$out"
 					echo $out
 					while [ $# -ne 0 ]; do shift; done
 					;;
