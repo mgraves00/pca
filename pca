@@ -100,7 +100,8 @@ function syntax {
 }
 
 function get_root {
-	echo "$HOME/.pca/$1"
+	local _root=${PCA_ROOT:-$HOME/.pca/$1}
+	echo "${_root}"
 }
 
 function check_ca {
