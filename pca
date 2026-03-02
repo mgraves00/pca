@@ -94,6 +94,7 @@ function syntax {
 	echo "  <ca> delete req|key|cert <-name name>"
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
 	echo "  <ca> export html <-file name> [-overwrite]"
+	echo "  <ca> export cert <-name name> <-file name> [-overwrite]"
 	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-overwrite]"
 	echo "  <ca> import request <-name name> <-file name> [-overwrite]"
 	echo ""
@@ -1567,6 +1568,43 @@ function export_html {
 	return 0
 }
 
+function export_cert {
+	local _ca=$1; shift;
+	local _n
+	local _f
+	local _tf
+	local _td
+	local _ow=0
+	[ -z "$_ca" ] && return 1
+	while [ $# -ne 0 ]; do
+		case "$1" in
+			-name)
+				_n=$2
+				shift; shift;;
+			-file)
+				_f=$2
+				shift; shift;;
+			-overwrite)
+				_ow=1
+				shift;;
+			*)
+				shift;;
+		esac
+	done
+	if [ -z "$_f" ]; then
+		die 1 "no output file"
+	fi
+	if [ ! -f "$CERTDIR/$_n.crt" ]; then
+		die 1 "cert not found"
+	fi
+	if [ -f $_f -a $_ow -eq 0 ]; then
+		die 1 "cannot export certificate. Fil already exists"
+	fi
+	${CP} -f $CERTDIR/$_n.crt $_f
+
+	return 0
+}
+
 #function check_root {
 #	local _ca=$1; shift
 #	local _n=$1
@@ -1844,6 +1882,11 @@ while [ $# -ne 0 ]; do
 				html)
 					shift;
 					out=`export_html $CA $*` || die 1 "$out"
+					echo $out
+					;;
+				cert*)
+					shift;
+					out=`export_cert $CA $*` || die 1 "$out"
 					echo $out
 					;;
 				*)
