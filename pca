@@ -125,6 +125,7 @@ function read_config {
 	if [ ! -f $_root/config/macros ]; then
 		die 1 "cannot read config"
 	fi
+	PCA_ROOT=$_root
 	# add macros to environment to be called directly
 	. $_root/config/macros
 	return 0
@@ -231,14 +232,13 @@ function init_ca {
 	${CAT} <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
-CAHOME=$_root
 RANDFILE=/dev/arandom
-CERTDIR=$_root/certs
-REQDIR=$_root/requests
-DBDIR=$_root/db
-LIBDIR=$_root/db/library
-CRLDIR=$_root/crl
-KEYDIR=$_root/private
+CERTDIR=\${PCA_ROOT}/certs
+REQDIR=\${PCA_ROOT}/requests
+DBDIR=\${PCA_ROOT}/db
+LIBDIR=\${PCA_ROOT}/db/library
+CRLDIR=\${PCA_ROOT}/crl
+KEYDIR=\${PCA_ROOT}/private
 ROOTCERT=root-$_ca.crt
 ROOTKEY=root-$_ca.key
 SIGNCERT=root-$_ca.crt
@@ -255,7 +255,7 @@ PATHLEN=1
 EOF
 
 	${CAT} <<EOF> $_root/config/prog_ca
-dir				= \$ENV::CAHOME
+dir				= \$ENV::PCA_ROOT
 certs			= \$ENV::CERTDIR
 crl_dir			= \$ENV::CRLDIR
 new_certs_dir	= \$ENV::LIBDIR
@@ -376,8 +376,8 @@ function build_config {
 	done
 	_tf=`newtmp "build_config: newtmp"`
 	echo # generated config > $_tf
-	${CAT} $CAHOME/config/macros >> $_tf
-	if [ -z "$_prog" -o ! -f $CAHOME/config/prog_$_prog ]; then
+	${CAT} $PCA_ROOT/config/macros >> $_tf
+	if [ -z "$_prog" -o ! -f $PCA_ROOT/config/prog_$_prog ]; then
 		echo "missing program or config not found"
 		${RM} -f $_tf
 		return 1
@@ -388,7 +388,7 @@ function build_config {
 		echo "default_ca=this_ca" >> $_tf
 		echo "[ this_ca ]" >> $_tf
 	fi
-	${CAT} $CAHOME/config/prog_$_prog >> $_tf
+	${CAT} $PCA_ROOT/config/prog_$_prog >> $_tf
 	[ ! -z "$_dn" ] && echo "distinguished_name=req_dn" >> $_tf
 	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
 	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
@@ -406,9 +406,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_attrs ]; then
-		if [ -f $CAHOME/config/$_attrs ]; then
+		if [ -f $PCA_ROOT/config/$_attrs ]; then
 			echo "[ $_attrs ]" >> $_tf
-			${CAT} $CAHOME/config/$_attrs >> $_tf
+			${CAT} $PCA_ROOT/config/$_attrs >> $_tf
 		else
 			echo "missing attrs config"
 			${RM} -f $_tf
@@ -417,9 +417,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_policy ]; then
-		if [ -f $CAHOME/config/$_policy ]; then
+		if [ -f $PCA_ROOT/config/$_policy ]; then
 			echo "[ $_policy ]" >> $_tf
-			${CAT} $CAHOME/config/$_policy >> $_tf
+			${CAT} $PCA_ROOT/config/$_policy >> $_tf
 		else
 			echo "missing policy config"
 			${RM} -f $_tf
@@ -428,9 +428,9 @@ function build_config {
 	fi
 	echo "" >> $_tf
 	if [ ! -z $_exten ]; then
-		if [ -f $CAHOME/config/$_exten ]; then
+		if [ -f $PCA_ROOT/config/$_exten ]; then
 			echo "[ $_exten ]" >> $_tf
-			${CAT} $CAHOME/config/$_exten >> $_tf
+			${CAT} $PCA_ROOT/config/$_exten >> $_tf
 			# SAN MUST ALWAY BE DIRECTLY AFTER extensions
 			if [ ! -z "$_san" ]; then
 				# must always be in teh cert_ext section
@@ -807,7 +807,7 @@ function get_config {
 		echo "no key specified"
 		return 1
 	fi
-	_kv=`${CAT} $CAHOME/config/$_n | ${GREP} -E -i "^$_k[[:space:]]*="`
+	_kv=`${CAT} $PCA_ROOT/config/$_n | ${GREP} -E -i "^$_k[[:space:]]*="`
 	if [ $_v -eq 0 ]; then
 		echo $_kv
 	else
@@ -855,7 +855,7 @@ function set_config {
 		return 1
 	fi
 	# make sure we are not adding the same key
-	${GREP} -E -c "^$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null 2>&1
+	${GREP} -E -c "^$_k[[:space:]]*=" $PCA_ROOT/config/$_n >/dev/null 2>&1
 	_rc=$?
 	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
 		_adm=0
@@ -870,18 +870,18 @@ function set_config {
 	fi
 	_tf=`newtmp "set_config: newtmp"`
 	if [ $_adm -eq 0 ]; then
-		${CAT} $CAHOME/config/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
+		${CAT} $PCA_ROOT/config/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
 		echo "$_k=$_v" >&2
 	else
 		if [ $_adm -eq 2 ]; then
-			${CAT} $CAHOME/config/$_n > $_tf
+			${CAT} $PCA_ROOT/config/$_n > $_tf
 			echo "$_k=$_v" >> $_tf
 			echo "$_k=$_v" >&2
 		else
-			${CAT} $CAHOME/config/$_n | ${SED} -r "/^$_k[[:space:]]*=/d" > $_tf
+			${CAT} $PCA_ROOT/config/$_n | ${SED} -r "/^$_k[[:space:]]*=/d" > $_tf
 		fi
 	fi
-	${MV} -f $_tf $CAHOME/config/$_n
+	${MV} -f $_tf $PCA_ROOT/config/$_n
 	return 0
 }
 
@@ -1226,7 +1226,7 @@ function import_config {
 		echo "must specify file"
 		return 1
 	fi
-	${CP} -f $_f $CAHOME/config/$_n
+	${CP} -f $_f $PCA_ROOT/config/$_n
 	return 0
 }
 
@@ -1672,22 +1672,22 @@ while [ $# -ne 0 ]; do
 					[ -z "$2" ] && die 1 "nothing to do"
 					case "$2" in
 						mac*)
-							${CAT} $CAHOME/config/macros
+							${CAT} $PCA_ROOT/config/macros
 							;;
 						pol*)
-							for i in `ls $CAHOME/config/policy_*`; do
+							for i in `ls $PCA_ROOT/config/policy_*`; do
 								echo "___ ${i##*/} ___"
 								${CAT} $i
 							done
 							;;
 						ext*)
-							for i in `ls $CAHOME/config/extension_*`; do
+							for i in `ls $PCA_ROOT/config/extension_*`; do
 								echo "___ ${i##*/} ___"
 								${CAT} $i
 							done
 							;;
 						prog*)
-							for i in `ls $CAHOME/config/prog_*`; do
+							for i in `ls $PCA_ROOT/config/prog_*`; do
 								echo "___ ${i##*/} ___"
 								${CAT} $i
 							done
