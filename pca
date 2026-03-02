@@ -126,9 +126,12 @@ function read_config {
 	if [ ! -f $_root/config/macros ]; then
 		die 1 "cannot read config"
 	fi
+	local _tf=`newtmp "read_config: newtmp"`
 	PCA_ROOT=$_root
 	# add macros to environment to be called directly
-	. $_root/config/macros
+	${CAT} $_root/config/macros | ${SED} -e 's/^PCA_ROOT=.*//' > ${_tf}
+	. $_tf
+	${RM} -f ${_tf}
 	return 0
 }
 
@@ -233,6 +236,7 @@ function init_ca {
 	${CAT} <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
+PCA_ROOT=%%PCA_ROOT%%
 RANDFILE=/dev/arandom
 CERTDIR=\${PCA_ROOT}/certs
 REQDIR=\${PCA_ROOT}/requests
@@ -256,26 +260,26 @@ PATHLEN=1
 EOF
 
 	${CAT} <<EOF> $_root/config/prog_ca
-dir				= \$ENV::PCA_ROOT
-certs			= \$ENV::CERTDIR
-crl_dir			= \$ENV::CRLDIR
-new_certs_dir	= \$ENV::LIBDIR
-database 		= \$ENV::DBDIR/index.txt
-serial			= \$ENV::DBDIR/serial.txt
-certificate		= \$ENV::CERTDIR/\$ENV::SIGNCERT
-private_key		= \$ENV::KEYDIR/\$ENV::SIGNKEY
-crl				= \$ENV::CRLDIR/\$ENV::ROOTCRL
-default_md		= \$ENV::DEFMD
-default_bits	= \$ENV::DEFBITS
-default_crl_days= \$ENV::CRLDAYS
-default_days	= \$ENV::CERTDAYS
+dir				= \$PCA_ROOT
+certs			= \$CERTDIR
+crl_dir			= \$CRLDIR
+new_certs_dir	= \$LIBDIR
+database 		= \$DBDIR/index.txt
+serial			= \$DBDIR/serial.txt
+certificate		= \$CERTDIR/\$SIGNCERT
+private_key		= \$KEYDIR/\$SIGNKEY
+crl				= \$CRLDIR/\$ROOTCRL
+default_md		= \$DEFMD
+default_bits	= \$DEFBITS
+default_crl_days= \$CRLDAYS
+default_days	= \$CERTDAYS
 string_mask		= utf8only
 EOF
 
 	${CAT} <<EOF> $_root/config/prog_req
-default_days	= \$ENV::CERTDAYS
-default_bits	= \$ENV::DEFBITS
-default_md		= \$ENV::DEFMD
+default_days	= \$CERTDAYS
+default_bits	= \$DEFBITS
+default_md		= \$DEFMD
 string_mask		= utf8only
 prompt			= no
 EOF
@@ -323,10 +327,10 @@ emailAddress=optional
 subjectAltName=optional
 EOF
 	${CAT} <<EOF> $_root/config/extension_ca
-basicConstraints = critical,CA:TRUE,pathlen:\$ENV::PATHLEN
+basicConstraints = critical,CA:TRUE,pathlen:\$PATHLEN
 keyUsage = critical,keyCertSign,cRLSign
 subjectKeyIdentifier = hash
-crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
+crlDistributionPoints = URI:\$PUBLICURL/\$ROOTCRL
 EOF
 
 	${CAT} <<EOF> $_root/config/extension_cert
@@ -335,7 +339,7 @@ keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth,clientAuth,emailProtection
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid
-crlDistributionPoints = URI:\$ENV::PUBLICURL/\$ENV::ROOTCRL
+crlDistributionPoints = URI:\$PUBLICURL/\$ROOTCRL
 EOF
 
 	return 0	
@@ -377,7 +381,7 @@ function build_config {
 	done
 	_tf=`newtmp "build_config: newtmp"`
 	echo # generated config > $_tf
-	${CAT} $PCA_ROOT/config/macros >> $_tf
+	${CAT} $PCA_ROOT/config/macros | ${SED} -e "s#%%PCA_ROOT%%#${PCA_ROOT}#" >> $_tf
 	if [ -z "$_prog" -o ! -f $PCA_ROOT/config/prog_$_prog ]; then
 		echo "missing program or config not found"
 		${RM} -f $_tf
