@@ -88,7 +88,7 @@ function syntax {
 	echo "  <ca> show req [-name name]"
 	echo "  <ca> show root [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint]"
 	echo "  <ca> show cert [-name name] [-serial] [-expire] [-subject] [-subjecthash] [-issuer] [-issuerhash] [-fingerprint] [-client] [-ca]"
-	echo "  <ca> sign <-name name> [-sign] [-days] [-san val ...]"
+	echo "  <ca> sign <-name name> [-sign] [-days] [-san val ...] [-ext alt_extension]"
 	echo "  <ca> resign <-name name> [-sign] [-days]"
 	echo "  <ca> revoke <-name name | -serial #> [-crl]"
 	echo "  <ca> delete req|key|cert <-name name>"
@@ -392,7 +392,7 @@ function build_config {
 	[ ! -z "$_dn" ] && echo "distinguished_name=req_dn" >> $_tf
 	[ ! -z "$_attrs" ] && echo "attributes=$_attrs" >> $_tf
 	[ ! -z "$_policy" ] && echo "policy=$_policy" >> $_tf
-		[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
+	[ ! -z "$_exten" ] && echo "x509_extensions=$_exten" >> $_tf
 	echo "" >> $_tf
 	if [ ! -z "$_dn" ]; then
 		if [ -f $_dn ]; then
@@ -855,7 +855,7 @@ function set_config {
 		return 1
 	fi
 	# make sure we are not adding the same key
-	${GREP} -E -c "^$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null
+	${GREP} -E -c "^$_k[[:space:]]*=" $CAHOME/config/$_n >/dev/null 2>&1
 	_rc=$?
 	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
 		_adm=0
@@ -893,6 +893,7 @@ function sign_req {
 	local _days
 	local _san
 	local _sign=0
+	local _ext="extension_cert"
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-days)
@@ -907,6 +908,9 @@ function sign_req {
 			-sign)
 				_sign=1
 				shift;;
+			-ext*)
+				_ext=$2
+				shift; shift;;
 			*)
 				echo "unknown option $1"
 				return 1
@@ -935,7 +939,7 @@ function sign_req {
 	if [ $_sign -eq 1 ]; then
 		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_ca $_san`
 	else
-		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_cert $_san`
+		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext $_ext $_san`
 	fi
 	if [ $? -ne 0 ]; then
 		echo $_tf
