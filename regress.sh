@@ -3,6 +3,7 @@ TN=test2
 CMD=./pca
 CABITS=2048
 CERTBITS=2048
+PCA_ROOT=./ca_regress
 
 TMPNAM=regress-tmp
 function die {
@@ -62,8 +63,9 @@ function testit {
 	set +x
 }
 
+export PCA_ROOT=$PCA_ROOT
 # clean up from last failure
-rm -rf $HOME/.pca/$TN
+rm -rf $PCA_ROOT/$TN
 
 runit 0 ${CMD} $TN init
 runit 1 ${CMD} $TN init
