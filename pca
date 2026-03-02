@@ -34,6 +34,7 @@ EGREP=$(which egrep)
 TR=$(which tr)
 CUT=$(which cut)
 CHMOD=$(which chmod)
+FIND=$(which find)
 
 function die {
 	local _rc=${1:?1}; shift;
@@ -101,8 +102,8 @@ function syntax {
 }
 
 function get_root {
-	local _root=${PCA_ROOT:-$HOME/.pca/$1}
-	echo "${_root}"
+	local _root="${PCA_ROOT:-$HOME/.pca}"
+	echo "${_root}/$1"
 }
 
 function check_ca {
@@ -971,7 +972,7 @@ function list_certs {
 	local _signing=${1:-0};
 	local _list
 	set -o noglob
-	for i in `find $CERTDIR/ -name $_n.crt -print`; do
+	for i in `${FIND} $CERTDIR/ -name $_n.crt -print`; do
 		_n=`$OS x509 -in $i -noout -text | ${EGREP} "CA:TRUE" | ${TR} -d " "`
 		case $_signing in
 			0) _list="${_list} $i" ;;
@@ -1149,7 +1150,7 @@ function show_requests {
 		_n='*'
 	fi
 	set -o noglob
-	for i in `find $REQDIR/ -name $_n.req -print` ; do
+	for i in `${FIND} $REQDIR/ -name $_n.req -print` ; do
 		_pn=${i##*/}
 		echo -n "${_pn%%.req}: "
 		$OS req -in $i -noout -subject
@@ -1272,7 +1273,7 @@ function delete_file {
 		return 1
 	fi
 	_fe=`eval echo $_fe`
-	for i in `find $_d \( $_fe \)  -print`; do
+	for i in `${FIND} $_d \( $_fe \)  -print`; do
 		echo "Removing ${i##*/}" >&2
 		${RM} -f $i
 	done
