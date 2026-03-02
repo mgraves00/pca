@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.5
+VER=1.6
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -30,7 +30,6 @@ CP=$(which cp)
 TAR=$(which tar)
 SED=$(which sed)
 GREP=$(which grep)
-EGREP=$(which egrep)
 TR=$(which tr)
 CUT=$(which cut)
 CHMOD=$(which chmod)
@@ -973,7 +972,7 @@ function list_certs {
 	local _list
 	set -o noglob
 	for i in `${FIND} $CERTDIR/ -name $_n.crt -print`; do
-		_n=`$OS x509 -in $i -noout -text | ${EGREP} "CA:TRUE" | ${TR} -d " "`
+		_n=`$OS x509 -in $i -noout -text | ${GREP} -E "CA:TRUE" | ${TR} -d " "`
 		case $_signing in
 			0) _list="${_list} $i" ;;
 			1) [[ ! -z "$_n" ]] && _list="${_list} $i" ;;
