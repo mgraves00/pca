@@ -35,6 +35,8 @@ CUT=$(which cut)
 CHMOD=$(which chmod)
 FIND=$(which find)
 
+DEBUG=${DEBUG:-0}
+
 function die {
 	local _rc=${1:?1}; shift;
 	local _out=$*
@@ -749,7 +751,9 @@ function create_req {
 		out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
 	fi
 	if [ $? -ne 0 ]; then
-		${CAT} $_tf >&2
+		if [ ${DEBUG} -gt 0 ]; then
+			${CAT} $_tf >&2
+		fi
 		${RM} -f $_tf
 		echo $out
 		return 1
@@ -772,7 +776,9 @@ function create_crl {
 	fi
 	out=`$OS ca -config $_tf -gencrl -out $CRLDIR/$ROOTCRL -days $CRLDAYS -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass 2>&1`
 	if [ $? -ne 0 ]; then
-		${CAT} $_tf >&2
+		if [ ${DEBUG} -gt 0 ]; then
+			${CAT} $_tf >&2
+		fi
 		${RM} -f $_tf
 		echo $out
 		return 1
@@ -954,7 +960,9 @@ function sign_req {
 	out=`$OS ca -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -cert $CERTDIR/$SIGNCERT -days $_days`
 #	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -cert $CERTDIR/$SIGNCERT -in $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
-		${CAT} $_tf >&2
+		if [ ${DEBUG} -gt 0 ]; then
+			${CAT} $_tf >&2
+		fi
 		${RM} -f $_tf
 		echo $out
 		return 1
@@ -1121,7 +1129,9 @@ function revoke_cert {
 	fi
 	out=`$OS ca -config $_tf -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -revoke $LIBDIR/$_s.pem`
 	if [ $? -ne 0 ]; then
-		${CAT} $_tf
+		if [ ${DEBUG} -gt 0 ]; then
+			${CAT} $_tf >&2
+		fi
 		${RM} -f $tf
 		echo $out
 		return 1
