@@ -94,7 +94,7 @@ function syntax {
 	echo "  <ca> delete req|key|cert <-name name>"
 	echo "  <ca> export pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-chain] [-overwrite]"
 	echo "  <ca> export html <-file name> [-overwrite]"
-	echo "  <ca> export cert <-name name> <-file name> [-overwrite]"
+	echo "  <ca> export cert <-name name> <-file name> [-overwrite] [-chain]"
 	echo "  <ca> import pkcs12 <-name name> <-file name> <-pass -|file:filename|password> [-overwrite]"
 	echo "  <ca> import request <-name name> <-file name> [-overwrite]"
 	echo ""
@@ -1579,9 +1579,13 @@ function export_cert {
 	local _tf
 	local _td
 	local _ow=0
+	local _ch=0
 	[ -z "$_ca" ] && return 1
 	while [ $# -ne 0 ]; do
 		case "$1" in
+			-ch*)
+				_ch=1
+				shift;;
 			-name)
 				_n=$2
 				shift; shift;;
@@ -1605,6 +1609,11 @@ function export_cert {
 		die 1 "cannot export certificate. Fil already exists"
 	fi
 	${CP} -f $CERTDIR/$_n.crt $_f
+	if [ $_ch -eq 1 ]; then
+		# generate the chain file
+		generate_chain
+		${CAT} $CERTDIR/$ROOTCHAIN >> $_f
+	fi
 
 	return 0
 }
