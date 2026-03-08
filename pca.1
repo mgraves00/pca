@@ -112,6 +112,7 @@
 .Op Fl sign
 .Op Fl days Cm #
 .Op Fl san Cm subaltname ...
+.Op Fl ext Cm alt_extension ...
 .Nm
 .Aq name
 .Oc resign
@@ -136,6 +137,12 @@
 .Aq Fl pass Cm -|file:filename|password
 .Op Fl overwrite
 .Op Fl chain
+.Nm
+.Aq name
+.Oc export cert
+.Aq Fl name Cm name
+.Aq Fl file Cm pkcsfile
+.Op Fl overwrite
 .Nm
 .Aq name
 .Oc export html
@@ -340,6 +347,8 @@ Enable the certificate to be able to sign requests.  Useful when creating a dedi
 Number of days the certificate is valid for.
 .It Fl san Cm subaltname
 Add one or more subject alternative names. See request for more detail.
+.It Fl ext Cm alt_extension
+Specify the extension to use when signing the request.
 .El
 .Ss resign
 Resign the specified CSR. This will revoke an existing cert then attempt to resign an existing CSR.
@@ -350,6 +359,8 @@ Specify the name of the request to sign
 Enable the certificate to be able to sign requests.  Useful when creating a dedicated issuer certificate. Use with caution
 .It Fl days Cm #
 Number of days the certificate is valid for.
+.It Fl ext Cm alt_extension
+Specify the extension to use when signing the request.
 .El
 .Ss revoke
 Revoke a certificate.
@@ -381,6 +392,14 @@ The password can also be specified on the command line.
 .It Fl overwrite
 If the certificate/key already exists by the name specified this will overwrite it.
 .El
+.Ss import request
+Import a CSR file into the CA.
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify the name of the request to import.
+.It Fl file Cm file
+Specify the CSR file the contains the request.
+.El
 .Ss export pkcs12
 Export a certificate into the specified PKCS12 file
 .Bl -tag -width Ds
@@ -398,6 +417,16 @@ If the export file already exists by the file name specified this will overwrite
 .It Fl chain
 Include the certificate chain in the export.
 .El
+.Ss export cert
+Export a named certificate
+.Bl -tag -width Ds
+.It Fl name Cm name
+Specify the the name of the certificate to export.
+.It Fl file Cm file
+Specify the the filename of the certificate to be placed in.
+.It Fl overwrite
+If the certificate file already exists by the file name specified this will overwrite it.
+.El
 .Ss export html
 Export a CA dirctory structure with the CA certs and the current CRL.
 .Bl -tag -width Ds
@@ -412,6 +441,9 @@ If the export file already exists by the file name specified this will overwrite
 .It Pa ~/.pca
 directory where the CA files etc are stored
 .El
+.Sh ENVIRONMENT
+.Ev PCA_ROOT
+- Set the root of the CA.  (default is ~/.pca)
 .Sh EXAMPLES
 To create a new CA called
 .Sq testCA
@@ -442,6 +474,7 @@ The file sunny.p12 can not be copied to another system and imported for use.
 .Pp
 .Sh SEE ALSO
 .Xr openssl 1
+.Xr openssl.cnf 5
 .Sh Authors
 Michael Graves
 .Aq mg@brainfat.net
