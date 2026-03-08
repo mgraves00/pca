@@ -1101,24 +1101,28 @@ function revoke_cert {
 		esac
 	done
 	if [ -z "$_n" -a -z "$_s" ]; then
-		echo "must specify cert name or serial number"
+		echo "error: must specify cert name or serial number"
 		return 1
 	fi
 	if [ ! -z "$_n" -a ! -z "$_s" ]; then
-		echo "must specify cert name OR serial number not both"
+		echo "error: must specify cert name OR serial number not both"
 		return 1
 	fi
 	if [ ! -z "$_n" ]; then
 		if [ ! -f "$CERTDIR/$_n.crt" ]; then
-			echo "cannot find cert by name $_n"
+			echo "error: cannot find cert by name $_n"
 			return 1
 		fi
 		out=`show_cert $_ca -name $_n -serial`
 		if [ $? -ne 0 ]; then
-			echo "cannot find cert with by name $_n"
+			echo "error: cannot find cert with by name $_n"
 			return 1
 		fi
 		_s=`echo $out | ${SED} 's/.*=//'`
+	fi
+	if [ ! -f ${LIBDIR}/${_s}.pem ]; then
+		echo "error: cert with serial ${_s} not found"
+		return 1
 	fi
 	# cleanup non-hex char
 	_s=`echo $_s | ${TR} -c -d "[:xdigit:]" | ${TR} "[:lower:]" "[:upper:]"`
