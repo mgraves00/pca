@@ -7,3 +7,4 @@ TODO
 *.pfx
 *.tgz
 *.tar.gz
+ca_regress
