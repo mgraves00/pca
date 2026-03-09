@@ -1403,7 +1403,7 @@ function export_pkcs12 {
 	if [ $_ch -eq 1 ]; then
 	_chain="-chain -CAfile $CERTDIR/$ROOTCHAIN"
 	fi
-	out=`$OS pkcs12 -aes256 -export -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout file:$_pf $_chain`
+	out=`$OS pkcs12 -export -in $CERTDIR/$_n.crt -inkey $KEYDIR/$_n.key -passin file:$KEYDIR/$_n.pass -out $_f -passout file:$_pf $_chain`
 	if [ $? -ne 0 ]; then
 		${RM} -f $_pf
 		echo "error extracting cert"
