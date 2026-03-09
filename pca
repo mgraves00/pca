@@ -748,7 +748,7 @@ function create_req {
 	if [ $_selfsign -eq 1 ]; then
 		out=`$OS req -config $_tf -new -x509 -key $_key -passin file:$KEYDIR/${_n%%.crt}.pass -out $CERTDIR/$_n.crt -days $_days`
 	else
-		out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req -days $_days`
+		out=`$OS req -config $_tf -new -batch -key $_key -passin file:$KEYDIR/$_n.pass -out $REQDIR/$_n.req`
 	fi
 	if [ $? -ne 0 ]; then
 		if [ ${DEBUG} -gt 0 ]; then
