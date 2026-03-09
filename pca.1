@@ -33,6 +33,10 @@
 .Aq Fl value Cm val
 .Nm
 .Aq name
+.Oc config sign 
+.Aq Fl name Cm certname
+.Nm
+.Aq name
 .Oc create crl
 .Nm
 .Aq name
@@ -206,10 +210,13 @@ The specific key to search for.
 Note the key is case sensitative.
 .It Fl value Cm value
 Sepecify the value to add to the key.
-Default is to display KEY=vavlue
-
-	set	sets a specific KEY equal to the specified value.  For MACROS only the key needs to be specified.  For all other file types the -name of the file needs to be specified.  There are optional arguments -a for adding a new key=value tuple and -d for deleting a specific key=value tuple.  When deleting a specific key=value tuple the -value option is not required and will be silently ignored.
-
+Default is to display KEY=value set	sets a specific KEY equal to the specified value.  For MACROS only the key needs to be specified.  For all other file types the -name of the file needs to be specified.  There are optional arguments -a for adding a new key=value tuple and -d for deleting a specific key=value tuple.  When deleting a specific key=value tuple the -value option is not required and will be silently ignored.
+.Ss config sign Aq name
+Certificate name that should be used as the signing certificate.
+.Bl -tag -width Ds
+.It Fl name
+Specify a name of the certificate to assign.
+.El
 .Ss create
 This command allows for the creation of specific PKI files necessary for operating the PKI.
 .Ss create crl
