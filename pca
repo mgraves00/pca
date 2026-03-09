@@ -239,7 +239,6 @@ function init_ca {
 # Personal Certificate Authority config
 #
 PCA_ROOT=%%PCA_ROOT%%
-RANDFILE=/dev/arandom
 CERTDIR=\${PCA_ROOT}/certs
 REQDIR=\${PCA_ROOT}/requests
 DBDIR=\${PCA_ROOT}/db
