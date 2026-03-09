@@ -80,7 +80,7 @@ function syntax {
 	echo "  <ca> config set macro [-a|-d] <-key key> <-value val>"
 	echo "  <ca> config get pol|ext|prog <-name name> <-key key> <-value>"
 	echo "  <ca> config set pol|ext|prog [-a|-d] <-name name> <-key key> <-value val>"
-	echo "  <ca> config set sign <-name name>"
+	echo "  <ca> config sign <-name name>"
 	echo "  <ca> create root [-days #] [-bits #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
 	echo "  <ca> create crl"
 	echo "  <ca> create key <-name name> [-bits #]"
