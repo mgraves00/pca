@@ -8,3 +8,4 @@ TODO
 *.tgz
 *.tar.gz
 ca_regress
+Makefile
