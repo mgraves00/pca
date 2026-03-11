@@ -5,33 +5,63 @@
 In cases where PCA is to be used in a chroot environment (such as when running
 behind webserver) there are several programs that are required.
 
-# create some directories
-doas install -d -m 1755 -o root -g wheel /var/www/tmp
-doas install -d -m 0755 -o root -g wheel /var/www/var/run
-doas install -d -m 0755 -o root -g wheel /var/www/bin
-# pca helper programs
-doas install -c -m 0555 -o root -g bin /bin/cp /var/www/bin/cp
-doas install -c -m 0555 -o root -g bin /bin/ls /var/www/bin/ls
-doas install -c -m 0555 -o root -g bin /bin/mv /var/www/bin/mv
-doas install -c -m 0555 -o root -g bin /bin/rm /var/www/bin/rm
-doas install -c -m 0555 -o root -g bin /bin/cat /var/www/bin/cat
-doas install -c -m 0555 -o root -g bin /bin/tar /var/www/bin/tar
-doas install -c -m 0555 -o root -g bin /bin/chmod /var/www/bin/chmod
-doas install -c -m 0555 -o root -g bin /bin/mkdir /var/www/bin/mkdir
-doas install -c -m 0555 -o root -g bin /usr/bin/cut /var/www/bin/cut
-doas install -c -m 0555 -o root -g bin /usr/bin/find /var/www/bin/find
-doas install -c -m 0555 -o root -g bin /usr/bin/grep /var/www/bin/grep
-doas install -c -m 0555 -o root -g bin /usr/bin/mktemp /var/www/bin/mktemp
-doas install -c -m 0555 -o root -g bin /usr/bin/openssl /var/www/bin/openssl
-doas install -c -m 0555 -o root -g bin /usr/bin/sed /var/www/bin/sed
-doas install -c -m 0555 -o root -g bin /usr/bin/touch /var/www/bin/touch
-doas install -c -m 0555 -o root -g bin /usr/bin/tr /var/www/bin/tr
-doas install -c -m 0644 -o root -g bin /usr/lib/libz.so.* /var/www/usr/lib
-doas install -c -m 0644 -o root -g bin /usr/lib/libc.so.* /var/www/usr/lib
-doas install -c -m 0644 -o root -g bin /usr/lib/libssl.so.* /var/www/usr/lib
-doas install -c -m 0644 -o root -g bin /usr/lib/libcrypto.so.* /var/www/usr/lib
-# refresh ld.hints
-doas chroot /var/www ldconfig -v -s /usr/lib /usr/local/lib
-# and now pca
-doas install -c -m 0555 -o root -g bin /usr/local/bin/pca /var/www/bin/pca
+# Copy required helper programs into the CHROOT environment
+
+	# create some directories
+	doas install -d -m 1755 -o root -g wheel /var/www/tmp
+	doas install -d -m 0755 -o root -g wheel /var/www/var/run
+	doas install -d -m 0755 -o root -g wheel /var/www/bin
+	# pca helper programs
+	doas install -c -m 0555 -o root -g bin /bin/cp /var/www/bin/cp
+	doas install -c -m 0555 -o root -g bin /bin/ls /var/www/bin/ls
+	doas install -c -m 0555 -o root -g bin /bin/mv /var/www/bin/mv
+	doas install -c -m 0555 -o root -g bin /bin/rm /var/www/bin/rm
+	doas install -c -m 0555 -o root -g bin /bin/cat /var/www/bin/cat
+	doas install -c -m 0555 -o root -g bin /bin/tar /var/www/bin/tar
+	doas install -c -m 0555 -o root -g bin /bin/chmod /var/www/bin/chmod
+	doas install -c -m 0555 -o root -g bin /bin/mkdir /var/www/bin/mkdir
+	doas install -c -m 0555 -o root -g bin /usr/bin/cut /var/www/bin/cut
+	doas install -c -m 0555 -o root -g bin /usr/bin/find /var/www/bin/find
+	doas install -c -m 0555 -o root -g bin /usr/bin/grep /var/www/bin/grep
+	doas install -c -m 0555 -o root -g bin /usr/bin/mktemp /var/www/bin/mktemp
+	doas install -c -m 0555 -o root -g bin /usr/bin/openssl /var/www/bin/openssl
+	doas install -c -m 0555 -o root -g bin /usr/bin/sed /var/www/bin/sed
+	doas install -c -m 0555 -o root -g bin /usr/bin/touch /var/www/bin/touch
+	doas install -c -m 0555 -o root -g bin /usr/bin/tr /var/www/bin/tr
+	doas install -c -m 0644 -o root -g bin /usr/lib/libz.so.* /var/www/usr/lib
+	doas install -c -m 0644 -o root -g bin /usr/lib/libc.so.* /var/www/usr/lib
+	doas install -c -m 0644 -o root -g bin /usr/lib/libssl.so.* /var/www/usr/lib
+	doas install -c -m 0644 -o root -g bin /usr/lib/libcrypto.so.* /var/www/usr/lib
+	# refresh ld.hints
+	doas chroot /var/www ldconfig -v -s /usr/lib /usr/local/lib
+	# and now pca
+	doas install -c -m 0555 -o root -g bin /usr/local/bin/pca /var/www/bin/pca
+
+# Setup initial ACME configuration
+	# setup some common variables
+	export PCA_ROOT=/var/www/etc/pca
+	export CA_NAME="acmera"
+	# create the PCA directory
+	mkdir -p $PCA_ROOT
+	# initialize the CA
+	pca $CA_NAME init
+	# Create an extension for the ACME RA
+	pca $CA_NAME config set ext -a -name extension_acme -key basicConstraints -value critical,CA:FALSE
+	pca $CA_NAME config set ext -a -name extension_acme -key keyUsage -value nonRepudiation,digitalSignature
+	pca $CA_NAME config set ext -a -name extension_acme -key subjectKeyIdentifier -value hash
+	pca $CA_NAME config set ext -a -name extension_acme -key authorityKeyIdentifier -value keyid
+	pca $CA_NAME config set ext -a -name extension_acme -key extendedKeyUsage -value serverAuth,clientAuth
+	pca $CA_NAME config set prog -a -name prog_ca -key copy_extensions -value CopyAll
+	pca $CA_NAME config set macro -key PUBLICURL -value http://acme.example.org/ca
+	pca $CA_NAME config set macro -key PATHLEN -value 2
+	# create the CA Root certificate
+	pca $CA_NAME create root -days 4000 -bits 4096 -cn 'Personal Certificate Authority Root'
+	# create ACME RA cert
+	pca $CA_NAME create req -name ACMERA -key 2048 -cn "ACME Registration Authority"
+	pca $CA_NAME sign -name ACMERA -sign -days 3650
+	# change the signing CERT to ACMERA
+	pca $CA_NAME config sign -name ACMERA 
+	# make sure directory is readable by the web user
+	chown -R www:www $PCA_ROOT/$CA_NAME
+	chmod -R g+w $PCA_ROOT/$CA_NAME
 
