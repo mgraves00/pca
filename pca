@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.6
+VER=1.7
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
