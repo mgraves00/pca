@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.7
+VER=1.8
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -75,11 +75,11 @@ function syntax {
 	echo "$NAME <ca> <command> [options]"
 	echo "Commands:"
 	echo "  <ca> init"
-	echo "  <ca> config list <mac[ros] | pol[icy] | ext[ension] | prog[ram]>"
+	echo "  <ca> config list <attr[s] | mac[ros] | pol[icy] | ext[ension] | prog[ram]>"
 	echo "  <ca> config get macro <-key key> <-value>"
 	echo "  <ca> config set macro [-a|-d] <-key key> <-value val>"
-	echo "  <ca> config get pol|ext|prog <-name name> <-key key> <-value>"
-	echo "  <ca> config set pol|ext|prog [-a|-d] <-name name> <-key key> <-value val>"
+	echo "  <ca> config get attr|pol|ext|prog <-name name> <-key key> <-value>"
+	echo "  <ca> config set attr|pol|ext|prog [-a|-d] <-name name> <-key key> <-value val>"
 	echo "  <ca> config sign <-name name>"
 	echo "  <ca> create root [-days #] [-bits #] [-cn name] [-ct x] [-sp x] [-co x] [-or x] [-ou x] [-em x] [ -san val ... ]"
 	echo "  <ca> create crl"
@@ -230,11 +230,13 @@ function init_ca {
 	${MKDIR} $_root/db
 	${TOUCH} $_root/db/serial.txt
 	${TOUCH} $_root/db/index.txt
-	${TOUCH} $_root/db/index.txt.attr
 	${MKDIR} $_root/db/library
 	${MKDIR} $_root/crl
 	${MKDIR} $_root/private
 	${MKDIR} $_root/config
+	${CAT} <<EOF> $_root/db/index.txt.attr
+unique_subject = no
+EOF
 	${CAT} <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
@@ -792,6 +794,7 @@ function get_config {
 	local _k
 	local _kv
 	local _v=0
+	local _cp="config"
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -813,11 +816,15 @@ function get_config {
 		echo "no name specified"
 		return 1
 	fi
+	if [ "$_n" == "index.txt.attr" ]; then
+		_cp="db"
+	fi
 	if [ -z "$_k" ]; then
 		echo "no key specified"
 		return 1
 	fi
-	_kv=`${CAT} $PCA_ROOT/config/$_n | ${GREP} -E -i "^$_k[[:space:]]*="`
+	[ ${DEBUG} -ne 0 ] && echo "looking up ${PCA_ROOT}/${_cp}/${_n} for ${_k}"
+	_kv=`${CAT} $PCA_ROOT/$_cp/$_n | ${GREP} -E -i "^$_k[[:space:]]*="`
 	if [ $_v -eq 0 ]; then
 		echo $_kv
 	else
@@ -833,6 +840,7 @@ function set_config {
 	local _kv
 	local _v
 	local _adm=0
+	local _cp="config"
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -860,12 +868,16 @@ function set_config {
 		echo "no name specified"
 		return 1
 	fi
+	if [ "$_n" == "index.txt.attr" ]; then
+		_cp="db"
+	fi
 	if [ -z "$_k" ]; then
 		echo "no key specified"
 		return 1
 	fi
+	[ ${DEBUG} -ne 0 ] && echo "setting ${PCA_ROOT}/${_cp}/${_n} for ${_k} = ${_v}"
 	# make sure we are not adding the same key
-	${GREP} -E -c "^$_k[[:space:]]*=" $PCA_ROOT/config/$_n >/dev/null 2>&1
+	${GREP} -E -c "^$_k[[:space:]]*=" $PCA_ROOT/$_cp/$_n >/dev/null 2>&1
 	_rc=$?
 	if [ $_adm -eq 2 -a $_rc -eq 0 ]; then
 		_adm=0
@@ -880,18 +892,18 @@ function set_config {
 	fi
 	_tf=`newtmp "set_config: newtmp"`
 	if [ $_adm -eq 0 ]; then
-		${CAT} $PCA_ROOT/config/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
+		${CAT} $PCA_ROOT/$_cp/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
 		echo "$_k=$_v" >&2
 	else
 		if [ $_adm -eq 2 ]; then
-			${CAT} $PCA_ROOT/config/$_n > $_tf
+			${CAT} $PCA_ROOT/$_cp/$_n > $_tf
 			echo "$_k=$_v" >> $_tf
 			echo "$_k=$_v" >&2
 		else
-			${CAT} $PCA_ROOT/config/$_n | ${SED} -r "/^$_k[[:space:]]*=/d" > $_tf
+			${CAT} $PCA_ROOT/$_cp/$_n | ${SED} -r "/^$_k[[:space:]]*=/d" > $_tf
 		fi
 	fi
-	${MV} -f $_tf $PCA_ROOT/config/$_n
+	${MV} -f $_tf $PCA_ROOT/$_cp/$_n
 	return 0
 }
 
@@ -1735,6 +1747,12 @@ while [ $# -ne 0 ]; do
 				list)
 					[ -z "$2" ] && die 1 "nothing to do"
 					case "$2" in
+						attr*)
+							for i in `ls $PCA_ROOT/config/*_attrs $PCA_ROOT/db/index.txt.attr`; do
+								echo "___ ${i##*/} ___"
+								${CAT} $i
+							done
+							;;
 						mac*)
 							${CAT} $PCA_ROOT/config/macros
 							;;
@@ -1773,7 +1791,7 @@ while [ $# -ne 0 ]; do
 							echo $out
 							while [ $# -ne 0 ]; do shift; done
 							;;
-						pol*|ext*|prog*)
+						attr*|pol*|ext*|prog*)
 							shift
 							out=`get_config $CA $*` || die 1 "$out"
 							# success... now eat rest of args
@@ -1797,7 +1815,7 @@ while [ $# -ne 0 ]; do
 							echo $out
 							while [ $# -ne 0 ]; do shift; done
 							;;
-						pol*|ext*|prog*)
+						attr*|pol*|ext*|prog*)
 							shift
 							out=`set_config $CA $*` || die 1 "$out"
 							# success... now eat rest of args

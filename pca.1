@@ -22,12 +22,12 @@
 .Aq Fl value Cm val
 .Nm
 .Aq name
-.Oc config get Aq pol|ext|prog
+.Oc config get Aq attr|pol|ext|prog
 .Aq Fl key Cm key
 .Aq Fl value
 .Nm
 .Aq name
-.Oc config set Aq pol|ext|prog
+.Oc config set Aq attr|pol|ext|prog
 .Op Fl a | d
 .Aq Fl key Cm key
 .Aq Fl value Cm val
@@ -179,11 +179,11 @@ Initializes the CA directory structure and creates configuration files.  The con
 This command allows for manipulation of the configuration files
 .Ss config list
 List all configuration files of a specific type
-.Ss config get Aq macro|pol|ext|prog
+.Ss config get Aq macro|attr|pol|ext|prog
 Retrieves the specific key from a specific type of file.
 .Bl -tag -width Ds
 .It Fl name Cm name
-Specify the name of the policy, extension, or program to used.  If macro is specified the name argument is not required
+Specify the name of the attribute, policy, extension, or program to used.  If macro is specified the name argument is not required
 .It Fl key Cm key
 The specific key to search for.
 Note the key is case sensitative.
@@ -191,11 +191,11 @@ Note the key is case sensitative.
 An optional flag when specified will cause just the value to be displayed.
 Default is to display KEY=vavlue
 .El
-.Ss config set Aq macro|pol|ext|prog
+.Ss config set Aq macro|attr|pol|ext|prog
 Sets the specific key and value in the specific type of file.
 .Bl -tag -width Ds
 .It Fl name Cm name
-Specify the name of the policy, extension, or program to used.  If macro is specified the name argument is not required
+Specify the name of the attribute, policy, extension, or program to used.  If macro is specified the name argument is not required
 .It Fl a
 Specify to add a new key to a file.
 .It Fl d
@@ -478,6 +478,9 @@ To export the certificate and key named
 and include the certificate chain do:
 .Dl $ pca testCA export pkcs12 -name sunny -file sunny.p12 -pass secret -chain -overwrite
 The file sunny.p12 can not be copied to another system and imported for use.
+.Pp
+To allow PCA to accept certificate with duplicate subjects (that are not revoked), set unique_subject = no
+.Dl $ pca testCA config set attr -name index.txt.attr -key unique_subject -val no
 .Pp
 .Sh SEE ALSO
 .Xr openssl 1

@@ -1,7 +1,7 @@
 # $OpenBSD$
 #
 COMMENT 	= personal certificate authority
-VERSION  	= 1.7
+VERSION  	= 1.8
 DISTNAME	= pca-${VERSION}
 CATEGORIES	= security
 HOMEPAGE	= https://github.com/mgraves00/pca
