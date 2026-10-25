@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.8.3
+VER=1.8.4
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -356,6 +356,7 @@ EOF
 
 # compile a one time use config file
 function build_config {
+	[ $DEBUG -gt 0 ] && echo "build_config args: $*" >&2
 	local _ca=$1; shift
 	[ -z "$_ca" ] && return 1
 	local _prog=$1; shift
@@ -458,6 +459,7 @@ function build_config {
 			return 1
 		fi
 	fi
+	[ ${DEBUG} -gt 1 ] && cat $_tf >&2
 	echo $_tf
 	return 0
 }
@@ -518,6 +520,7 @@ function create_key {
 }
 
 function create_root {
+	[ $DEBUG -gt 0 ] && echo "create_root args: $*" >&2
 	local _ca=$1; shift;
 	local _n
 	local _key
@@ -591,14 +594,14 @@ function create_root {
 		# if not specified, make root key 2 * DEFBITS
 		_bits=$((DEFBITS * 2))
 	fi
-	if [ ! -f $KEYDIR/$_n ]; then
+	if [ ! -f $KEYDIR/${_n%%.crt}.key ]; then
 		_key=`create_key $_ca -name ${_n%%.crt} -bits $_bits`
 		if [ $? -ne 0 ]; then
 			echo "error creating root key"
 			return 1
 		fi
 	else
-		_key=$KEYDIR/$_n
+		_key=$KEYDIR/${_n%%.crt}.key
 	fi
 	if [ -z "$_key" ]; then
 		echo "no key specified"
@@ -612,7 +615,8 @@ function create_root {
 		echo "no distinguished name options specified"
 		return 1
 	fi
-	out=`create_req $_ca -name ${_n%%.crt} -key ${_key} -ext "root_ca" $_req`
+	# MAKE sure that -ext is after the _req as it will override the default extension
+	out=`create_req $_ca -name ${_n%%.crt} -key ${_key} $_req -ext "root_ca"`
 	if [ $? -ne 0 ]; then
 		echo $out
 		return 1
@@ -624,6 +628,7 @@ function create_root {
 }
 
 function create_req {
+	[ $DEBUG -gt 0 ] && echo "create_req args: $*" >&2
 	local _ca=$1; shift;
 	local _n
 	local _key
