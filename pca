@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.8.6
+VER=1.8.7
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -253,7 +253,7 @@ SIGNCERT=root-$_ca.crt
 SIGNKEY=root-$_ca.key
 ROOTCRL=root-$_ca.crl
 ROOTCHAIN=$_ca-chain.pem
-CHAIN=root-$_ca.crt
+CHAIN=root-$_ca
 CRLDAYS=365
 CERTDAYS=365
 DEFMD=sha256
@@ -861,6 +861,7 @@ function get_config {
 }
 
 function set_config {
+	[ $DEBUG -gt 0 ] && echo "set_config args: $*" >&2
 	local _ca=$1; shift;
 	local _n
 	local _k
@@ -877,8 +878,10 @@ function set_config {
 				_k=$2
 				shift; shift;;
 			-val*)
-				_v=$2
-				shift; shift;;
+				shift;
+				_v=$*
+				while [ $# -ne 0 ]; do shift; done
+				;;
 			-a)
 				_adm=2
 				shift;;
@@ -902,7 +905,7 @@ function set_config {
 		echo "no key specified"
 		return 1
 	fi
-	[ ${DEBUG} -ne 0 ] && echo "setting ${PCA_ROOT}/${_cp}/${_n} for ${_k} = ${_v}"
+	[ ${DEBUG} -ne 0 ] && echo "setting ${PCA_ROOT}/${_cp}/${_n} for ${_k} = \"${_v}\""
 	# make sure we are not adding the same key
 	${GREP} -E -c "^$_k[[:space:]]*=" $PCA_ROOT/$_cp/$_n >/dev/null 2>&1
 	_rc=$?
@@ -919,13 +922,13 @@ function set_config {
 	fi
 	_tf=`newtmp "set_config: newtmp"`
 	if [ $_adm -eq 0 ]; then
-		${CAT} $PCA_ROOT/$_cp/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1$_v~" > $_tf
-		echo "$_k=$_v" >&2
+		${CAT} $PCA_ROOT/$_cp/$_n | ${SED} -r "s~(^$_k[[:space:]]*=[[:space:]]*).*~\1\"$_v\"~" > $_tf
+		echo "$_k=\"$_v\"" >&2
 	else
 		if [ $_adm -eq 2 ]; then
 			${CAT} $PCA_ROOT/$_cp/$_n > $_tf
-			echo "$_k=$_v" >> $_tf
-			echo "$_k=$_v" >&2
+			echo "$_k=\"$_v\"" >> $_tf
+			echo "$_k=\"$_v\"" >&2
 		else
 			${CAT} $PCA_ROOT/$_cp/$_n | ${SED} -r "/^$_k[[:space:]]*=/d" > $_tf
 		fi
@@ -1696,13 +1699,23 @@ function export_cert {
 #}
 
 function generate_chain {
-	set -o noglob
-	local _calist=`list_certs "*" 1`
-	set +o noglob
-	if [ -z "$_calist" ]; then
-		die 1 "could not find any CA certs"
+	[ $DEBUG -gt 0 ] && echo "generate_chain args: $*" >&2
+#	set -o noglob
+#	local _calist=`list_certs "*" 1`
+#	set +o noglob
+#	if [ -z "$_calist" ]; then
+#		die 1 "could not find any CA certs"
+#	fi
+	for c in ${CHAIN}; do
+		[ $DEBUG -gt 0 ] && echo "generate_chain: $c" >&2
+		_cname=`list_certs "$c"`
+		if [ ! -z "${_cname}" ]; then
+			${CAT} $_cname >> $CERTDIR/${ROOTCHAIN}.new
+		fi
+	done
+	if [ -f $CERTDIR/${ROOTCHAIN}.new ]; then
+		${MV} $CERTDIR/${ROOTCHAIN}.new $CERTDIR/${ROOTCHAIN}
 	fi
-	${CAT} $_calist > $CERTDIR/$ROOTCHAIN
 	return 0
 }
 
@@ -1715,6 +1728,8 @@ fi
 CA=$1; shift;
 
 trap die QUIT TERM
+
+[ $DEBUG -gt 0 ] && echo "main: $*"
 
 if [ "$1" == "init" ]; then
 	out=`init_ca $CA`
