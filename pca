@@ -1927,9 +1927,10 @@ while [ $# -ne 0 ]; do
 		del*)
 			shift;
 			if [ "$1" == "all" ]; then
-				out=`delete_file $CA cert` || die 1 "$out"
-				out=`delete_file $CA key` || die 1 "$out"
-				out=`delete_file $CA req` || die 1 "$out"
+				shift
+				out=`delete_file $CA cert $*` || die 1 "$out"
+				out=`delete_file $CA key $*` || die 1 "$out"
+				out=`delete_file $CA req $*` || die 1 "$out"
 			else
 				out=`delete_file $CA $*` || die 1 "$out"
 			fi

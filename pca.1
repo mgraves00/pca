@@ -131,7 +131,7 @@
 .Nm
 .Aq name
 .Oc delete
-.Aq req|key|cert
+.Aq req|key|cert|all
 .Aq Fl name Cm name
 .Nm
 .Aq name
@@ -378,8 +378,8 @@ Specify the name or serial number of the certificate to revoke.
 .It Fl crl
 After the certificate is revoked, generate a new CRL.
 .El
-.Ss delete	req|cert|key
-Delete a certificate, key or request from the CA
+.Ss delete	req|cert|key|all
+Delete a certificate, key or request (or all) from the CA
 .Bl -tag -width Ds
 .It Fl name Cm name
 Specify the name of the request, certificate or key to delete.  The deletion is perminant.
