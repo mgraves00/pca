@@ -4,7 +4,7 @@ VER!=grep -Eo '^VER=.*' pca | cut -f2 -d=
 BASENAME=pca
 RELNAME=${BASENAME}-${VER}
 RELPATH=dist
-obsd_port_path=ports/security/pca
+obsd_port_path=packages/OpenBSD/security/pca
 FILES= LICENSE \
 	   pca \
 	   pca.1
@@ -30,7 +30,8 @@ ports!
 	${_size_fragment} ${RELNAME}.tar.gz ${RELNAME}.tar.gz >> $$ck; \
 	mv -f $$ck ${.CURDIR}/${obsd_port_path}/distinfo
 	sed -i 's~^\(VERSION[[:space:]]*=[[:space:]]*\).*~\1${VER}~' ${.CURDIR}/${obsd_port_path}/Makefile
-#	-git commit -m "update checksum" ${.CURDIR}/${obsd_port_path}/distinfo
+	-git commit -m "update checksum" ${.CURDIR}/${obsd_port_path}/distinfo
+	-git commit -m "update version" ${.CURDIR}/${obsd_port_path}/Makefile
 
 distfile:
 	[ -d ${.CURDIR}/${RELPATH}/${RELNAME} ] || mkdir -p ${.CURDIR}/${RELPATH}/${RELNAME}
