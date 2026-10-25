@@ -1173,7 +1173,7 @@ function revoke_cert {
 		echo $_tf
 		return 1
 	fi
-	out=`$OS ca -config $_tf -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -revoke $LIBDIR/$_s.pem`
+	out=`$OS ca -config $_tf -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -revoke $LIBDIR/$_s.pem 2>&1`
 	if [ $? -ne 0 ]; then
 		if [ ${DEBUG} -gt 0 ]; then
 			${CAT} $_tf >&2
