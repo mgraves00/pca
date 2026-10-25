@@ -49,6 +49,7 @@
 .Nm
 .Aq name
 .Oc create root
+.Op Fl name Cm name
 .Op Fl days Cm #
 .Op Fl bits Cm #
 .Op Fl cn Cm common name
@@ -260,6 +261,8 @@ Subject alternative name of the subject.  Can be specified more than once.  All 
 .Ss create root
 Create the root certificate.  This will only need to be done once after macros have been adjusted.
 .Bl -tag -width Ds
+.It Fl name Cm certificate name.
+Set the file name to save the certificate and key under (optional). If not set the value of SIGNCERT will be used.
 .It Fl bits Cm #
 Set the number of bits the root key is to use.
 .It Fl days Cm #
