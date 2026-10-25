@@ -1,6 +1,5 @@
 TODO
 .git
-.gitignore
 .regress-tmp.*
 .*.ca
 *.p12
@@ -8,4 +7,4 @@ TODO
 *.tgz
 *.tar.gz
 ca_regress
-Makefile
+dist/*
