@@ -60,6 +60,7 @@
 .Op Fl ou Cm organizational unit
 .Op Fl em Cm email
 .Op Fl san Cm subaltname ...
+.Op Fl force
 .Nm
 .Aq name
 .Oc create req
@@ -283,6 +284,8 @@ Organizational unit name of the subject.
 Email of the subject
 .It Fl san Cm subaltname ...
 Subject alternative name of the subject.  Can be specified more than once.  All values entered must be prefixed with their respecitive type: DNS= for dns name; IP= for IP address; EM= for email.
+.It Fl force
+DANGER! This will force the creation of the root certificate even if one already exists. This could destroy the chain of trust for the entire CA.
 .Ss show
 Display various parts of the CA
 .Ss show crl
