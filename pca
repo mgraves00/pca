@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.8
+VER=1.8.1
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -220,24 +220,24 @@ function init_ca {
 		return 1
 	fi
 	_root=`get_root $_ca`
-	if [ -d $_root ]; then
-		echo "CA $_ca already exists"
-		return 1
-	fi
-	${MKDIR} -p $_root
-	${MKDIR} $_root/certs
-	${MKDIR} $_root/requests
-	${MKDIR} $_root/db
-	${TOUCH} $_root/db/serial.txt
-	${TOUCH} $_root/db/index.txt
-	${MKDIR} $_root/db/library
-	${MKDIR} $_root/crl
-	${MKDIR} $_root/private
-	${MKDIR} $_root/config
-	${CAT} <<EOF> $_root/db/index.txt.attr
+#	if [ -d $_root ]; then
+#		echo "CA $_ca already exists"
+#		return 1
+#	fi
+	[ -d $_root ] || ${MKDIR} -p $_root
+	[ -d $_root/certs ] || ${MKDIR} $_root/certs
+	[ -d $_root/requests ] || ${MKDIR} $_root/requests
+	[ -d $_root/db ] || ${MKDIR} $_root/db
+	[ -f $_root/db/serial.txt ] || ${TOUCH} $_root/db/serial.txt
+	[ -f $_root/db/index.txt ] || ${TOUCH} $_root/db/index.txt
+	[ -d $_root/db/library ] || ${MKDIR} $_root/db/library
+	[ -d $_root/db/crl ] || ${MKDIR} $_root/crl
+	[ -d $_root/db/private ] || ${MKDIR} $_root/private
+	[ -d $_root/db/config ] || ${MKDIR} $_root/config
+	[ -f $_root/db/index.txt.attr] || ${CAT} <<EOF> $_root/db/index.txt.attr
 unique_subject = no
 EOF
-	${CAT} <<EOF> $_root/config/macros
+	[ -f $_root/config/macros ] || ${CAT} <<EOF> $_root/config/macros
 # Personal Certificate Authority config
 #
 PCA_ROOT=%%PCA_ROOT%%
@@ -262,7 +262,7 @@ PUBLICURL=http://127.0.0.1/ca
 PATHLEN=1
 EOF
 
-	${CAT} <<EOF> $_root/config/prog_ca
+	[ -f $_root/config/prog_ca ] || ${CAT} <<EOF> $_root/config/prog_ca
 dir				= \$PCA_ROOT
 certs			= \$CERTDIR
 crl_dir			= \$CRLDIR
@@ -279,14 +279,14 @@ default_days	= \$CERTDAYS
 string_mask		= utf8only
 EOF
 
-	${CAT} <<EOF> $_root/config/prog_req
+	[ -f $_root/config/prog_req ] || ${CAT} <<EOF> $_root/config/prog_req
 default_days	= \$CERTDAYS
 default_bits	= \$DEFBITS
 default_md		= \$DEFMD
 string_mask		= utf8only
 prompt			= no
 EOF
-	${CAT} <<EOF> $_root/config/req_dn
+	[ -f $_root/config/req_dn ] || ${CAT} <<EOF> $_root/config/req_dn
 countryName                     = Country Name (2 letter code)
 countryName_default             = XX
 countryName_min                 = 2
@@ -303,13 +303,13 @@ commonName_max                  = 64
 emailAddress                    = Email Address
 emailAddress_max                = 64
 EOF
-	${CAT} <<EOF> $_root/config/req_attrs
+	[ -f $_root/config/req_attrs ] || ${CAT} <<EOF> $_root/config/req_attrs
 #challengePassword               = A challenge password
 #challengePassword_min           = 4
 #challengePassword_max           = 20
 #unstructuredName                = An optional company name
 EOF
-	${CAT} <<EOF> $_root/config/policy_match
+	[ -f $_root/config/policy_match ] || ${CAT} <<EOF> $_root/config/policy_match
 countryName=match
 stateOrProvinceName=optional
 localityName=optional
@@ -319,7 +319,7 @@ commonName=supplied
 emailAddress=optional
 subjectAltName=optional
 EOF
-	${CAT} <<EOF> $_root/config/policy_sign
+	[ -f $_root/config/policy_sign ] || ${CAT} <<EOF> $_root/config/policy_sign
 countryName=optional
 stateOrProvinceName=optional
 localityName=optional
@@ -329,19 +329,25 @@ commonName=supplied
 emailAddress=optional
 subjectAltName=optional
 EOF
-	${CAT} <<EOF> $_root/config/extension_ca
+	[ -f $_root/config/root_ca ] || ${CAT} <<EOF> $_root/config/root_ca
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,keyCertSign,cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+EOF
+	[ -f $_root/config/extension_ca ] || ${CAT} <<EOF> $_root/config/extension_ca
 basicConstraints = critical,CA:TRUE,pathlen:\$PATHLEN
 keyUsage = critical,keyCertSign,cRLSign
 subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always, issuer
 crlDistributionPoints = URI:\$PUBLICURL/\$ROOTCRL
 EOF
-
-	${CAT} <<EOF> $_root/config/extension_cert
+	[ -f $_root/config/extension_cert ] || ${CAT} <<EOF> $_root/config/extension_cert
 basicConstraints = critical,CA:FALSE
 keyUsage = nonRepudiation,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth,clientAuth,emailProtection
 subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid
+authorityKeyIdentifier = keyid:always, issuer
 crlDistributionPoints = URI:\$PUBLICURL/\$ROOTCRL
 EOF
 
@@ -601,7 +607,7 @@ function create_root {
 		echo "no distinguished name options specified"
 		return 1
 	fi
-	out=`create_req $_ca -name ${SIGNCERT%%.crt} -key ${SIGNKEY} $_req`
+	out=`create_req $_ca -name ${SIGNCERT%%.crt} -key ${SIGNKEY} -ext "root_ca" $_req`
 	if [ $? -ne 0 ]; then
 		echo $out
 		return 1
@@ -629,6 +635,7 @@ function create_req {
 	local _or
 	local _ou
 	local _em
+	local _ext="extension_cert"
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-name)
@@ -663,9 +670,11 @@ function create_req {
 			-selfsign)
 				_sign=1
 				_selfsign=1
+				_ext="extension_ca"
 				shift;;
 			-sign)
 				_sign=1
+				_ext="extension_ca"
 				shift;;
 			-co)		# Country
 				shift; _x=""; while [ $# -ne 0 -a "$1" = "${1##*-}" ]; do _x="$_x $1"; shift; done
@@ -693,6 +702,9 @@ function create_req {
 				;;
 			-em)		# Email
 				_em=$2
+				shift; shift;;
+			-ext)
+				_ext=$2
 				shift; shift;;
 			*)
 				echo "unknown option $1"
@@ -737,11 +749,12 @@ function create_req {
 		done
 	fi
 
-	if [ $_sign -eq 1 ]; then
-		_tf=`build_config $_ca "req" -policy policy_sign -ext extension_ca -a req_attrs -dn $REQDIR/$_n.dn`
-	else
-		_tf=`build_config $_ca "req" -policy policy_match -ext extension_cert -a req_attrs -dn $REQDIR/$_n.dn`
-	fi
+#	if [ $_sign -eq 1 ]; then
+#		_tf=`build_config $_ca "req" -policy policy_sign -ext $_ext -a req_attrs -dn $REQDIR/$_n.dn`
+#	else
+#		_tf=`build_config $_ca "req" -policy policy_match -ext $_ext -a req_attrs -dn $REQDIR/$_n.dn`
+#	fi
+	_tf=`build_config $_ca "req" -policy policy_match -ext $_ext -a req_attrs -dn $REQDIR/$_n.dn`
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
@@ -929,6 +942,7 @@ function sign_req {
 				shift; shift;;
 			-sign)
 				_sign=1
+				_ext="extension_ca"
 				shift;;
 			-ext*)
 				_ext=$2
@@ -958,11 +972,11 @@ function sign_req {
 	if [ -f $REQDIR/$_n.san ]; then
 		_san="-san $REQDIR/$_n.san"
 	fi
-	if [ $_sign -eq 1 ]; then
-		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_ca $_san`
-	else
+#	if [ $_sign -eq 1 ]; then
+#		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_ca $_san`
+#	else
 		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext $_ext $_san`
-	fi
+#	fi
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
@@ -1912,7 +1926,13 @@ while [ $# -ne 0 ]; do
 			;;
 		del*)
 			shift;
-			out=`delete_file $CA $*` || die 1 "$out"
+			if [ "$1" == "all" ]; then
+				out=`delete_file $CA cert` || die 1 "$out"
+				out=`delete_file $CA key` || die 1 "$out"
+				out=`delete_file $CA req` || die 1 "$out"
+			else
+				out=`delete_file $CA $*` || die 1 "$out"
+			fi
 			while [ $# -ne 0 ]; do shift; done
 			;;
 		export)
