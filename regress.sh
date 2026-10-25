@@ -77,8 +77,8 @@ runit 0 ${CMD} $TN config list extension
 # macro / policy / extension all use the same function
 #testit "CAHOME=$HOME/.pca/$TN" ${CMD} $TN config get macro -key CAHOME
 #testit "$HOME/.pca/$TN" ${CMD} $TN config get macro -key CAHOME -value
-testit "TEST10=10" ${CMD} $TN config set macro -a -key TEST10 -value 10
-testit "TEST10=11" ${CMD} $TN config set macro -key TEST10 -value 11
+testit "TEST10=\"10\"" ${CMD} $TN config set macro -a -key TEST10 -value 10
+testit "TEST10=\"11 12\"" ${CMD} $TN config set macro -key TEST10 -value "11 12"
 testit "" ${CMD} $TN config set macro -d -key TEST10
 testit "" ${CMD} $TN config get macro -key TEST10
 
