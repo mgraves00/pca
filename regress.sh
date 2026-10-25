@@ -68,7 +68,7 @@ export PCA_ROOT=$PCA_ROOT
 rm -rf $PCA_ROOT/$TN
 
 runit 0 ${CMD} $TN init
-runit 1 ${CMD} $TN init
+#runit 1 ${CMD} $TN init
 
 runit 0 ${CMD} $TN config list macros
 runit 0 ${CMD} $TN config list policy
