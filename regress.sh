@@ -84,6 +84,8 @@ testit "" ${CMD} $TN config get macro -key TEST10
 
 # create a root cert
 runit 0 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA"
+runit 1 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA"
+runit 0 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA" -force
 runit 0 ${CMD} $TN show root
 testit "root-test2: subject= /O=testCA" ${CMD} $TN show root -subject
 
