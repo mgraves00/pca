@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.8.2
+VER=1.8.3
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -592,7 +592,7 @@ function create_root {
 		_bits=$((DEFBITS * 2))
 	fi
 	if [ ! -f $KEYDIR/$_n ]; then
-		_key=`create_key $_ca -name ${_n%%.key} -bits $_bits`
+		_key=`create_key $_ca -name ${_n%%.crt} -bits $_bits`
 		if [ $? -ne 0 ]; then
 			echo "error creating root key"
 			return 1
@@ -612,7 +612,7 @@ function create_root {
 		echo "no distinguished name options specified"
 		return 1
 	fi
-	out=`create_req $_ca -name ${_n%%.crt} -key ${_n} -ext "root_ca" $_req`
+	out=`create_req $_ca -name ${_n%%.crt} -key ${_key} -ext "root_ca" $_req`
 	if [ $? -ne 0 ]; then
 		echo $out
 		return 1
