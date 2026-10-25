@@ -27,7 +27,7 @@ ports!
 	trap "rm -f $$ck; exit 1" 1 2 3 13 15; \
 	cd ${.CURDIR}/${RELPATH}; \
 	cksum -b -a SHA256 -- ${RELNAME}.tar.gz >> $$ck; \
-	${_size_fragment} ${RELNAME}.tag.gz ${RELNAME}.tar.gz >> $$ck; \
+	${_size_fragment} ${RELNAME}.tar.gz ${RELNAME}.tar.gz >> $$ck; \
 	mv -f $$ck ${.CURDIR}/${obsd_port_path}/distinfo
 	sed -i 's~^\(VERSION[[:space:]]*=[[:space:]]*\).*~\1${VER}~' ${.CURDIR}/${obsd_port_path}/Makefile
 #	-git commit -m "update checksum" ${.CURDIR}/${obsd_port_path}/distinfo
