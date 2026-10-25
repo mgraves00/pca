@@ -1613,11 +1613,11 @@ function export_html {
 	_cert_list=`list_certs "*" 1`
 	set +o noglob
 	for _tf in $_cert_list; do
-		${CP} $_tf $_td/ca
+		${CP} $_tf $_td/ca 2>/dev/null
 	done
-	${CP} $CRLDIR/$ROOTCRL $_td/ca
+	${CP} $CRLDIR/$ROOTCRL $_td/ca 2>/dev/null
 	_tf=`newtmp "export_html: newtmp"`
-	${TAR} -zcf $_tf -C $_td .
+	${TAR} -zcf $_tf -C $_td ca/
 	if [ -f $_f -a $_ow -eq 0 ]; then
 		die 1 "cannot create export. File already exists"
 	fi
