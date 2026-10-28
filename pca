@@ -17,7 +17,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #
 
-VER=1.8.7
+VER=1.8.8
 NAME=${0##*/}
 OS=$(which openssl)
 RM=$(which rm)
@@ -366,6 +366,7 @@ function build_config {
 	local _dn
 	local _attrs
 	local _san
+	local _preserve=1
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-p*)
@@ -383,6 +384,9 @@ function build_config {
 			-s*)
 				_san=$2
 				shift; shift;;
+			-x*)
+				_preserve=0
+				shift;;
 			*)
 				echo "unknown option $1"
 				return 1
@@ -390,7 +394,7 @@ function build_config {
 		esac
 	done
 	_tf=`newtmp "build_config: newtmp"`
-	echo # generated config > $_tf
+	echo "# generated config" > $_tf
 	${CAT} $PCA_ROOT/config/macros | ${SED} -e "s#%%PCA_ROOT%%#${PCA_ROOT}#" >> $_tf
 	if [ -z "$_prog" -o ! -f $PCA_ROOT/config/prog_$_prog ]; then
 		echo "missing program or config not found"
@@ -400,6 +404,9 @@ function build_config {
 	echo "" >> $_tf
 	echo "[ $_prog ]" >> $_tf
 	if [ "$_prog" == "ca" ]; then
+		if [ "$_preserve" -ne 1 ]; then
+			echo "preserve = no" >> $_tf
+		fi
 		echo "default_ca=this_ca" >> $_tf
 		echo "[ this_ca ]" >> $_tf
 	fi
@@ -938,6 +945,7 @@ function set_config {
 }
 
 function sign_req {
+	[ $DEBUG -gt 0 ] && echo "sign_req args: $*" >&2
 	local _ca=$1; shift;
 	[ -z "$_ca" ] && return 1
 	local _n
@@ -946,6 +954,8 @@ function sign_req {
 	local _san
 	local _sign=0
 	local _ext="extension_cert"
+	local _sub=""
+	local _preserve=""
 	while [ $# -ne 0 ]; do
 		case "$1" in
 			-days)
@@ -963,6 +973,10 @@ function sign_req {
 				shift;;
 			-ext*)
 				_ext=$2
+				shift; shift;;
+			-subj*)
+				_sub="-subj $2"
+				_preserve="-x"
 				shift; shift;;
 			*)
 				echo "unknown option $1"
@@ -992,19 +1006,23 @@ function sign_req {
 #	if [ $_sign -eq 1 ]; then
 #		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext extension_ca $_san`
 #	else
-		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext $_ext $_san`
+		_tf=`build_config "$_ca" "ca" -policy policy_sign -ext $_ext $_san $_preserve`
 #	fi
 	if [ $? -ne 0 ]; then
 		echo $_tf
 		return 1
 	fi
 	prep_serial $_ca
-	out=`$OS ca -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -cert $CERTDIR/$SIGNCERT -days $_days`
+	CMD="$OS ca -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -passin file:$KEYDIR/${SIGNKEY%%.key}.pass -cert $CERTDIR/$SIGNCERT $_sub -days $_days"
+	[ $DEBUG -gt 0 ] && echo "CMD: $CMD" >&2
+	out=`$CMD`
+#	out=`$OS ca -batch -config "$_tf" -out "$CERTDIR/$_n.crt" -in "$_file" -keyfile "$KEYDIR/$SIGNKEY" -passin "file:$KEYDIR/${SIGNKEY%%.key}.pass" -cert "$CERTDIR/$SIGNCERT" -days "$_days" $_sub`
 #	out=`$OS ca -verbose -batch -config $_tf -out $CERTDIR/$_n.crt -in $_file -keyfile $KEYDIR/$SIGNKEY -cert $CERTDIR/$SIGNCERT -in $REQDIR/$_n.req -days $_days`
 	if [ $? -ne 0 ]; then
 		if [ ${DEBUG} -gt 0 ]; then
 			${CAT} $_tf >&2
 		fi
+#		cp $_tf ./err.cnf
 		${RM} -f $_tf
 		echo $out
 		return 1

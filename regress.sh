@@ -89,6 +89,17 @@ runit 0 ${CMD} $TN create root -days 10 -bits ${CABITS} -or "testCA" -force
 runit 0 ${CMD} $TN show root
 testit "root-test2: subject= /O=testCA" ${CMD} $TN show root -subject
 
+# create cert without a subject then sign it and add the subject
+_key=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
+_csr=`mktemp $TMPNAM.XXXXXXX || die 1 "mktemp"`
+openssl req -new -newkey rsa:2048 -nodes -keyout ${_key} -subj "/" -addext "subjectAltName = critical,DNS:nosubj.example.com" -out ${_csr}
+runit 0 ${CMD} $TN import req -name nosubj.example.com -file ${_csr}
+rm -f ${_key}
+rm -f ${_csr}
+runit 0 ${CMD} $TN sign -name nosubj.example.com -subj "/CN=nosubj.example.com"
+testit "nosubj.example.com: subject= /CN=nosubj.example.com" ${CMD} $TN show certs -name nosubj.example.com -subject
+runit 0 ${CMD} $TN delete cert -name nosubj.example.com
+
 # create a request
 runit 0 ${CMD} $TN create req -name sunny -newkey ${CERTBITS} -days 5 -cn sunny.example.com -or "testCA" -san DNS=bright.example.com
 testit "sunny: subject=/O=testCA/CN=sunny.example.com" ${CMD} $TN show req -name sunny
@@ -137,7 +148,6 @@ runit 0 ${CMD} $TN delete cert -name sunny
 testit "" ${CMD} $TN show cert -client -subject
 testit "" ${CMD} $TN show req
 
-
 # work on req options
 runit 0 ${CMD} $TN create req -name cloudy -newkey ${CERTBITS} -days 5 -cn cloudy.example.com -or "testCA" -ou "testDiv" -ct NoPlace -sp NoWhere -co XX -em bitbucket@cloudy.example.com -san DNS=sad.example.com
 testit "cloudy: subject=/C=XX/ST=NoWhere/L=NoPlace/O=testCA/OU=testDiv/CN=cloudy.example.com/emailAddress=bitbucket@cloudy.example.com" ${CMD} $TN show req -name cloudy
@@ -152,6 +162,7 @@ runit 0 'echo "letemin" | ${CMD} '$TN export pkcs12 -name sunny -pass - -chain -
 
 # resign an existing cert
 runit 0 ${CMD} $TN resign -name cloudy
+
 
 die 0 "Complete Success"
 
