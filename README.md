@@ -155,7 +155,7 @@ is stored next to the key, so it is trival to retreave an unencrypted cert and k
 2) I want this to be simple.  I didn't want to mess with typing a **secure** password just to do **every** activity.
 
 ## Companion Applications
-There is a companion application called (ACME.cgi)[https://github.com/mgraves00/ACME.cgi] that will allow you to create an RFC8555
+There is a companion application called [ACME.cgi](https://github.com/mgraves00/ACME.cgi) that will allow you to create an RFC8555
 compliant ACME server that can issue certificates to standard ACME clients.  This kinda streches the `personal` CA into a `homelab` CA.
 
 ## History
